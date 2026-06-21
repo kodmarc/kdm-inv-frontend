@@ -1,0 +1,36 @@
+# Dependencies
+node_modules/
+/jspm_packages
+
+# Build / Output
+dist/
+dist-ssr/
+*.local
+
+# Cache
+.vite/
+.cache/
+
+# Environment Variables
+.env
+.env.local
+.env.production
+.env.development
+.env.staging
+.env.*.local
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# IDE / System
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+*.swp

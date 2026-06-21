@@ -1,0 +1,853 @@
+import React, { useState, useEffect } from 'react';
+import { useOutletContext, useParams, useNavigate } from 'react-router-dom';
+import type { CompanyHomeLayoutContextType } from '../CompanyHomeLayout';
+import api from '../../../../services/api';
+import { SearchableSelect } from '../../../../components/ui';
+
+// Flexible date parsing function supporting "4 6 2006", "4 jan 2006", "04 06 2006" etc.
+const parseFlexibleDate = (str: string): string => {
+  if (!str) return '';
+  const trimmed = str.trim();
+  const parts = trimmed.split(/[\s\-/.]+/);
+  
+  if (parts.length === 3) {
+    let day = parseInt(parts[0], 10);
+    let monthInput = parts[1].toLowerCase();
+    let year = parseInt(parts[2], 10);
+    
+    let month = parseInt(monthInput, 10);
+    if (isNaN(month)) {
+      const monthsAbbr = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+      const monthsFull = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
+      
+      let foundIndex = monthsAbbr.findIndex(m => monthInput.startsWith(m));
+      if (foundIndex === -1) {
+        foundIndex = monthsFull.findIndex(m => monthInput.startsWith(m));
+      }
+      if (foundIndex !== -1) {
+        month = foundIndex + 1;
+      }
+    }
+    
+    if (!isNaN(year) && year < 100) {
+      year += year < 50 ? 2000 : 1900;
+    }
+    
+    if (!isNaN(day) && !isNaN(month) && !isNaN(year)) {
+      if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+        const yyyy = String(year);
+        const mm = String(month).padStart(2, '0');
+        const dd = String(day).padStart(2, '0');
+        return `${yyyy}-${mm}-${dd}`;
+      }
+    }
+  }
+  
+  const timestamp = Date.parse(trimmed);
+  if (!isNaN(timestamp)) {
+    const d = new Date(timestamp);
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  }
+  
+  return trimmed;
+};
+
+export const DamageReceivingForm: React.FC = () => {
+  const { id } = useParams<{ id?: string }>();
+  const { branchSlug, companySlug } = useParams<{ branchSlug: string; companySlug: string }>();
+  const navigate = useNavigate();
+
+  const {
+    items,
+    parties,
+    salesmen,
+    accounts,
+    activeCompany,
+    setSuccess,
+    setError
+  } = useOutletContext<CompanyHomeLayoutContextType>();
+
+  // Form fields
+  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [dateInput, setDateInput] = useState(new Date().toISOString().split('T')[0]);
+  const [salesman, setSalesman] = useState('');
+  const [party, setParty] = useState('');
+  const [account, setAccount] = useState('');
+  const [statusVal, setStatusVal] = useState<'pending' | 'paid'>('pending');
+  const [remarks, setRemarks] = useState('');
+  const [sTax, setSTax] = useState('0.00');
+  const [lineItems, setLineItems] = useState<any[]>([]);
+
+  // Sync dateInput when date state changes (e.g. on loading existing receiving)
+  useEffect(() => {
+    if (date) {
+      setDateInput(date);
+    }
+  }, [date]);
+
+  const handleDateBlur = () => {
+    const parsed = parseFlexibleDate(dateInput);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(parsed)) {
+      setDate(parsed);
+      setDateInput(parsed);
+    }
+  };
+
+  // Snapshot/Display Fields from Customer/Party
+  const [ntn, setNtn] = useState('');
+  const [gstNo, setGstNo] = useState('');
+  const [creditLimit, setCreditLimit] = useState('0.00');
+  const [balanceAmount, setBalanceAmount] = useState('0.00');
+  const [creditDays, setCreditDays] = useState(0);
+
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isStatusDropdownOpen, setIsStatusDropdownOpen] = useState(false);
+
+  const customers = parties.filter(p => p.is_party && p.is_active);
+  const activeSalesmen = salesmen.filter(s => s.is_active);
+  const activeAccounts = accounts.filter(a => a.is_active);
+
+  // Set default account & salesman if available
+  useEffect(() => {
+    if (!id) {
+      if (activeAccounts.length > 0 && !account) {
+        setAccount(activeAccounts[0].id);
+      }
+      if (activeSalesmen.length > 0 && !salesman) {
+        setSalesman(activeSalesmen[0].id);
+      }
+    }
+  }, [accounts, salesmen, id]);
+
+  // Load initial empty row if new transaction
+  useEffect(() => {
+    if (!id && lineItems.length === 0) {
+      addEmptyLineItem();
+    }
+  }, [id, lineItems]);
+
+  // Load existing receiving sheet for editing
+  useEffect(() => {
+    const loadReceiving = async () => {
+      if (id) {
+        try {
+          const res = await api.get(`/damage-receivings/${id}/`);
+          const ret = res.data;
+          if (ret) {
+            setDate(ret.date);
+            setSalesman(ret.salesman);
+            setParty(ret.party);
+            setAccount(ret.account);
+            setStatusVal(ret.status);
+            setRemarks(ret.remarks || '');
+            setSTax(parseFloat(ret.s_tax).toFixed(2));
+            
+            // Snapshots
+            setNtn(ret.ntn || '');
+            setGstNo(ret.gst_no || '');
+            setCreditLimit(parseFloat(ret.credit_limit).toFixed(2));
+            setBalanceAmount(parseFloat(ret.balance_amount).toFixed(2));
+            setCreditDays(ret.credit_days || 0);
+
+            // Load line items
+            const itemsList = ret.line_items.map((line: any) => {
+              const matchedItem = items.find(it => it.id === line.item);
+              const pack = matchedItem?.pack || 1;
+              const totalPcs = parseFloat(line.pcs);
+              const cartonVal = Math.floor(totalPcs / pack);
+
+              return {
+                item: line.item,
+                item_name: line.item_name || matchedItem?.name || '—',
+                item_code: line.item_code || matchedItem?.code || '—',
+                pack: pack,
+                carton: cartonVal,
+                manual_code: line.manual_code || '',
+                issue_units: parseFloat(line.issue_units) || 0,
+                pcs: totalPcs, // Damage Qty (total pieces)
+                rate: parseFloat(line.rate).toFixed(2),
+                amount: parseFloat(line.amount).toFixed(2),
+                s_tax_rate: parseFloat(line.s_tax_rate).toFixed(2),
+                s_tax_amount: parseFloat(line.s_tax_amount).toFixed(2),
+                gross_amount: parseFloat(line.gross_amount).toFixed(2),
+                net_amount: parseFloat(line.net_amount).toFixed(2)
+              };
+            });
+            setLineItems(itemsList);
+          }
+        } catch (err) {
+          console.error('Failed to load damage receiving', err);
+          setError('Failed to load damage receiving data.');
+        }
+      }
+    };
+    loadReceiving();
+  }, [id, items]);
+
+  // Handle party select change to populate snaps
+  const handlePartyChange = (partyId: string) => {
+    setParty(partyId);
+    const selected = parties.find(p => p.id === partyId);
+    if (selected) {
+      setNtn(selected.ntn || '');
+      setGstNo(selected.gst_no || '');
+      setCreditLimit(parseFloat(selected.credit_limit).toFixed(2));
+      setBalanceAmount(parseFloat(selected.balance_amount).toFixed(2));
+      setCreditDays(0);
+    }
+  };
+
+  // Add empty line item row
+  const addEmptyLineItem = () => {
+    setLineItems(prev => [
+      ...prev,
+      {
+        item: '',
+        item_name: '',
+        item_code: '',
+        pack: 1,
+        carton: 0,
+        manual_code: '',
+        issue_units: 0,
+        pcs: 0, // Damage Qty (total pieces)
+        rate: '0.00',
+        amount: '0.00',
+        s_tax_rate: '0.00',
+        s_tax_amount: '0.00',
+        gross_amount: '0.00',
+        net_amount: '0.00'
+      }
+    ]);
+  };
+
+  // Handle changing an item inside a row dropdown
+  const handleRowItemChange = (index: number, itemId: string) => {
+    if (!itemId) {
+      const updated = [...lineItems];
+      updated[index] = {
+        item: '',
+        item_name: '',
+        item_code: '',
+        pack: 1,
+        carton: 0,
+        manual_code: '',
+        issue_units: 0,
+        pcs: 0,
+        rate: '0.00',
+        amount: '0.00',
+        s_tax_rate: '0.00',
+        s_tax_amount: '0.00',
+        gross_amount: '0.00',
+        net_amount: '0.00'
+      };
+      setLineItems(updated);
+      return;
+    }
+
+    const selected = items.find(it => it.id === itemId);
+    if (!selected) return;
+
+    // Check duplicate
+    if (lineItems.some((li, idx) => li.item === itemId && idx !== index)) {
+      setError('Item is already added to another row.');
+      setTimeout(() => setError(''), 3000);
+      return;
+    }
+
+    const updated = [...lineItems];
+    const pack = selected.pack || 1;
+    const rate = parseFloat(selected.sales_rate || '0.00').toFixed(2);
+    const sTaxRate = parseFloat(selected.sales_tax || '0.00').toFixed(2);
+
+    updated[index] = {
+      item: selected.id,
+      item_name: selected.name,
+      item_code: selected.code,
+      pack: pack,
+      carton: updated[index].carton || 0,
+      manual_code: updated[index].manual_code || '',
+      issue_units: updated[index].issue_units || 0,
+      pcs: updated[index].pcs || 0, // Damage Qty (total pieces)
+      rate: rate,
+      amount: '0.00',
+      s_tax_rate: sTaxRate,
+      s_tax_amount: '0.00',
+      gross_amount: '0.00',
+      net_amount: '0.00'
+    };
+
+    // Calculate row values
+    const carton = updated[index].carton;
+    let totalPcs = updated[index].pcs || 0;
+    if (carton > 0 && totalPcs === 0) {
+      totalPcs = carton * pack;
+      updated[index].pcs = totalPcs;
+    }
+    const parsedRate = parseFloat(rate);
+    const parsedSTaxRate = parseFloat(sTaxRate);
+
+    const baseAmount = totalPcs * parsedRate;
+    const sTaxAmt = baseAmount * (parsedSTaxRate / 100);
+    const grossAmt = baseAmount + sTaxAmt;
+    const netAmt = grossAmt;
+
+    updated[index].amount = baseAmount.toFixed(2);
+    updated[index].s_tax_amount = sTaxAmt.toFixed(2);
+    updated[index].gross_amount = grossAmt.toFixed(2);
+    updated[index].net_amount = netAmt.toFixed(2);
+
+    setLineItems(updated);
+  };
+
+  // Update line item details
+  const updateLineItem = (index: number, key: string, value: any) => {
+    const updated = [...lineItems];
+    const item = { ...updated[index] };
+
+    if (key === 'manual_code') {
+      item.manual_code = value;
+    } else if (key === 'issue_units') {
+      item.issue_units = parseFloat(value) || 0;
+    } else if (key === 'carton') {
+      item.carton = parseFloat(value) || 0;
+      item.pcs = item.carton * item.pack;
+    } else if (key === 'pcs') {
+      item.pcs = parseFloat(value) || 0;
+      item.carton = Math.floor(item.pcs / item.pack);
+    } else if (key === 'rate') {
+      item.rate = value;
+    } else if (key === 's_tax_rate') {
+      item.s_tax_rate = value;
+    }
+
+    // Calculations
+    const totalPcs = item.pcs;
+    const parsedRate = parseFloat(item.rate) || 0;
+    const parsedSTaxRate = parseFloat(item.s_tax_rate) || 0;
+
+    const baseAmount = totalPcs * parsedRate;
+    const sTaxAmt = baseAmount * (parsedSTaxRate / 100);
+    const grossAmt = baseAmount + sTaxAmt;
+    const netAmt = grossAmt;
+
+    item.amount = baseAmount.toFixed(2);
+    item.s_tax_amount = sTaxAmt.toFixed(2);
+    item.gross_amount = grossAmt.toFixed(2);
+    item.net_amount = netAmt.toFixed(2);
+
+    updated[index] = item;
+    setLineItems(updated);
+  };
+
+  // Remove line item row
+  const removeLineItem = (index: number) => {
+    if (lineItems.length <= 1) {
+      setError('Invoice must have at least one row.');
+      setTimeout(() => setError(''), 3000);
+      return;
+    }
+    setLineItems(lineItems.filter((_, idx) => idx !== index));
+  };
+
+  // Totals calculations
+  const grandTotal = lineItems.reduce((sum, li) => sum + (parseFloat(li.net_amount) || 0), 0);
+  const totalSTaxSum = lineItems.reduce((sum, li) => sum + (parseFloat(li.s_tax_amount) || 0), 0);
+
+  // Sync document level tax
+  useEffect(() => {
+    setSTax(totalSTaxSum.toFixed(2));
+  }, [lineItems]);
+
+  // Submit Handler
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    // Filter blank rows
+    const validLines = lineItems.filter(li => li.item);
+    if (validLines.length === 0) {
+      setError('Damage receiving sheet must have at least one valid item selected.');
+      setTimeout(() => setError(''), 4000);
+      return;
+    }
+
+    setIsSubmitting(true);
+    setFormErrors({});
+
+    let finalDate = date;
+    const parsed = parseFlexibleDate(dateInput);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(parsed)) {
+      finalDate = parsed;
+    } else {
+      setError('Please enter a valid date (e.g. DD-MM-YYYY or DD Jan YYYY).');
+      setIsSubmitting(false);
+      setTimeout(() => setError(''), 4000);
+      return;
+    }
+
+    const payload = {
+      date: finalDate,
+      salesman: salesman || null,
+      party,
+      account,
+      company: activeCompany?.id,
+      status: statusVal,
+      remarks: remarks.trim() || null,
+      s_tax: sTax || '0.00',
+      net_amount: grandTotal.toFixed(2),
+      ntn: ntn.trim() || null,
+      gst_no: gstNo.trim() || null,
+      credit_limit: creditLimit || '0.00',
+      balance_amount: balanceAmount || '0.00',
+      credit_days: creditDays || 0,
+      line_items: validLines.map(li => ({
+        item: li.item,
+        manual_code: li.manual_code || null,
+        issue_units: li.issue_units,
+        pcs: li.pcs, // Damage Qty
+        rate: li.rate,
+        amount: li.amount,
+        s_tax_rate: li.s_tax_rate,
+        s_tax_amount: li.s_tax_amount,
+        gross_amount: li.gross_amount,
+        net_amount: li.net_amount
+      }))
+    };
+
+    try {
+      if (id) {
+        await api.put(`/damage-receivings/${id}/`, payload);
+        setSuccess('Damage receiving updated successfully.');
+      } else {
+        await api.post('/damage-receivings/', payload);
+        setSuccess('Damage receiving saved successfully.');
+      }
+      setTimeout(() => setSuccess(''), 3000);
+      navigate(`/branch/${branchSlug}/company/${companySlug}/damage-receiving`);
+    } catch (err: any) {
+      const errorData = err.response?.data;
+      if (errorData) {
+        const errors: Record<string, string> = {};
+        Object.entries(errorData).forEach(([key, val]) => {
+          errors[key] = Array.isArray(val) ? val.join(' ') : String(val);
+        });
+        setFormErrors(errors);
+        if (errors.non_field_errors) {
+          setError(errors.non_field_errors);
+        } else {
+          setError('Please review fields with errors.');
+        }
+      } else {
+        setError('An unexpected error occurred while saving.');
+      }
+      setTimeout(() => setError(''), 4000);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="animate-fade-in bg-white p-6 w-full mx-auto">
+      {/* Top Header Row */}
+      <div className="mb-6 pb-4 border-b border-zinc-100 flex items-center justify-between">
+        <div>
+          <h3 className="text-lg font-bold text-navy tracking-tight">
+            {id ? 'Modify Damage Receiving' : 'New Damage Receiving'}
+          </h3>
+          <p className="text-xs text-muted mt-1 font-medium">
+            Record defected or broken products received back from customers, and post ledger adjustments.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-3">
+          {/* Status Toggle Dropdown Button */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setIsStatusDropdownOpen(!isStatusDropdownOpen)}
+              className={`cursor-pointer px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all shadow-xs border flex items-center gap-1.5 ${
+                statusVal === 'paid'
+                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                  : 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100'
+              }`}
+              disabled={isSubmitting}
+            >
+              Status: {statusVal} <span className="text-[8px]">▼</span>
+            </button>
+            {isStatusDropdownOpen && (
+              <div className="absolute right-0 top-[100%] mt-1 bg-white border border-zinc-200 rounded-xl shadow-lg z-50 text-xs font-bold divide-y divide-zinc-50 w-28 overflow-hidden">
+                <div
+                  onClick={() => {
+                    setStatusVal('pending');
+                    setIsStatusDropdownOpen(false);
+                  }}
+                  className="px-4 py-2 hover:bg-rose-50 text-rose-600 cursor-pointer transition-colors"
+                >
+                  PENDING
+                </div>
+                <div
+                  onClick={() => {
+                    setStatusVal('paid');
+                    setIsStatusDropdownOpen(false);
+                  }}
+                  className="px-4 py-2 hover:bg-emerald-50 text-emerald-600 cursor-pointer transition-colors"
+                >
+                  PAID
+                </div>
+              </div>
+            )}
+          </div>
+
+          <button
+            type="button"
+            onClick={() => navigate(`/branch/${branchSlug}/company/${companySlug}/damage-receiving`)}
+            className="cursor-pointer bg-zinc-50 border border-zinc-200 hover:bg-zinc-100 text-zinc-600 text-xs font-bold px-4 py-2 rounded-xl transition-all"
+            disabled={isSubmitting}
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+
+      <form onSubmit={handleSubmit} className="space-y-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+          {/* Date */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[10px] font-bold text-zinc-500 uppercase">Receiving Date *</label>
+            <input
+              type="text"
+              required
+              className="text-xs border border-zinc-200 rounded-xl px-3 py-2.5 bg-white font-bold outline-hidden focus:outline-hidden"
+              value={dateInput}
+              onChange={(e) => setDateInput(e.target.value)}
+              onBlur={handleDateBlur}
+              disabled={isSubmitting}
+            />
+            {formErrors.date && <span className="text-[10px] text-danger font-semibold mt-1">{formErrors.date}</span>}
+          </div>
+
+          {/* Customer Select */}
+          <div className="flex flex-col gap-1.5 md:col-span-2">
+            <SearchableSelect
+              label="Customer Name *"
+              placeholder=""
+              options={customers.map(c => ({ value: c.id, label: `${c.name} (${c.contact_no})` }))}
+              value={party}
+              onChange={(val) => handlePartyChange(val)}
+              disabled={isSubmitting || !!id}
+              required
+              error={formErrors.party}
+            />
+          </div>
+
+          {/* Salesman Select */}
+          <div className="flex flex-col gap-1.5">
+            <SearchableSelect
+              label="Salesman *"
+              placeholder=""
+              options={activeSalesmen.map(s => ({ value: s.id, label: `${s.name} (${s.contact_no})` }))}
+              value={salesman}
+              onChange={(val) => setSalesman(val)}
+              disabled={isSubmitting}
+              required
+              error={formErrors.salesman}
+            />
+          </div>
+
+          {/* Financial Account */}
+          <div className="flex flex-col gap-1.5 md:col-span-2">
+            <SearchableSelect
+              label="Financial Account *"
+              placeholder=""
+              options={activeAccounts.map(a => ({ value: a.id, label: `${a.name} (${a.code})` }))}
+              value={account}
+              onChange={(val) => setAccount(val)}
+              disabled={isSubmitting}
+              required
+              error={formErrors.account}
+            />
+          </div>
+
+          {/* Remarks */}
+          <div className="flex flex-col gap-1.5 md:col-span-2">
+            <label className="text-[10px] font-bold text-zinc-500 uppercase">Remarks / Reason</label>
+            <input
+              type="text"
+              className="text-xs border border-zinc-200 rounded-xl px-3 py-2.5 bg-white font-bold outline-hidden focus:outline-hidden"
+              value={remarks}
+              onChange={(e) => setRemarks(e.target.value)}
+              disabled={isSubmitting}
+            />
+          </div>
+
+          {/* NTN */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[10px] font-bold text-zinc-500 uppercase">NTN</label>
+            <input
+              type="text"
+              className="text-xs border border-zinc-200 rounded-xl px-3 py-2.5 bg-white font-bold outline-hidden focus:outline-hidden"
+              value={ntn}
+              onChange={(e) => setNtn(e.target.value)}
+              disabled={isSubmitting}
+            />
+          </div>
+
+          {/* GST */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[10px] font-bold text-zinc-500 uppercase">GST Registration</label>
+            <input
+              type="text"
+              className="text-xs border border-zinc-200 rounded-xl px-3 py-2.5 bg-white font-bold outline-hidden focus:outline-hidden"
+              value={gstNo}
+              onChange={(e) => setGstNo(e.target.value)}
+              disabled={isSubmitting}
+            />
+          </div>
+
+          {/* Credit Limit */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[10px] font-bold text-zinc-500 uppercase">Credit Limit (Rs.)</label>
+            <input
+              type="number"
+              step="0.01"
+              className="text-xs border border-zinc-200 rounded-xl px-3 py-2.5 bg-white font-bold outline-hidden focus:outline-hidden"
+              value={creditLimit}
+              onChange={(e) => setCreditLimit(e.target.value)}
+              disabled={isSubmitting}
+            />
+          </div>
+
+          {/* Outstanding Balance */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[10px] font-bold text-zinc-500 uppercase">Outstanding Bal. (Rs.)</label>
+            <input
+              type="number"
+              step="0.01"
+              className="text-xs border border-zinc-200 rounded-xl px-3 py-2.5 bg-white font-bold outline-hidden focus:outline-hidden"
+              value={balanceAmount}
+              onChange={(e) => setBalanceAmount(e.target.value)}
+              disabled={isSubmitting}
+            />
+          </div>
+
+          {/* Credit Days Allowed */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[10px] font-bold text-zinc-500 uppercase">Credit Days Allowed</label>
+            <input
+              type="number"
+              className="text-xs border border-zinc-200 rounded-xl px-3 py-2.5 bg-white font-bold outline-hidden focus:outline-hidden"
+              value={creditDays}
+              onChange={(e) => setCreditDays(parseInt(e.target.value, 10) || 0)}
+              disabled={isSubmitting}
+            />
+          </div>
+        </div>
+
+        {/* Line Items Catalogue Table */}
+        <div className="pt-4">
+          <table className="min-w-full border-collapse border border-zinc-200 text-left">
+            <thead>
+              <tr className="bg-zinc-50 text-[10px] font-bold tracking-wider text-muted uppercase">
+                <th className="border border-zinc-200 px-3 py-2 w-24">Manual Code</th>
+                <th className="border border-zinc-200 px-3 py-2 min-w-[220px]">Item Name</th>
+                <th className="border border-zinc-200 px-3 py-2 text-right w-16">Pack</th>
+                <th className="border border-zinc-200 px-3 py-2 text-right w-20">Carton</th>
+                <th className="border border-zinc-200 px-3 py-2 text-right w-20">Damage Qty (Pcs)</th>
+                <th className="border border-zinc-200 px-3 py-2 text-right w-20">Issue Units</th>
+                <th className="border border-zinc-200 px-3 py-2 text-right w-24">Rate (Pc)</th>
+                <th className="border border-zinc-200 px-3 py-2 text-right w-20">S.Tax Rate (%)</th>
+                <th className="border border-zinc-200 px-3 py-2 text-right">S.Tax Amount</th>
+                <th className="border border-zinc-200 px-3 py-2 text-right">Gross Amount</th>
+                <th className="border border-zinc-200 px-3 py-2 text-right">Net Amount</th>
+                <th className="border border-zinc-200 px-3 py-2 text-center w-20">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="text-xs font-medium text-zinc-700 bg-white">
+              {lineItems.map((li, index) => {
+                return (
+                  <tr key={index} className="hover:bg-zinc-50/20 transition-colors">
+                    <td className="border border-zinc-200 p-0">
+                      <input
+                        type="text"
+                        placeholder="Code"
+                        className="w-full h-full bg-transparent border-0 focus:outline-hidden focus:ring-0 px-3 py-2 text-xs font-bold"
+                        value={li.manual_code}
+                        onChange={(e) => updateLineItem(index, 'manual_code', e.target.value)}
+                        disabled={isSubmitting || !li.item}
+                      />
+                    </td>
+                    
+                    <td className="border border-zinc-200 p-0">
+                      <SearchableSelect
+                        compact
+                        borderless
+                        placeholder=""
+                        options={items.filter(it => it.is_active).map(it => ({ value: it.id, label: `${it.name} (${it.code})` }))}
+                        value={li.item}
+                        onChange={(val) => handleRowItemChange(index, val)}
+                        disabled={isSubmitting}
+                      />
+                    </td>
+
+                    <td className="border border-zinc-200 px-3 py-2 text-right text-zinc-500 font-semibold">{li.pack}</td>
+
+                    {/* Carton */}
+                    <td className="border border-zinc-200 p-0 text-right">
+                      <input
+                        type="number"
+                        min="0"
+                        className="w-full h-full text-right bg-transparent border-0 focus:outline-hidden focus:ring-0 px-3 py-2 text-xs font-semibold"
+                        value={li.carton}
+                        onChange={(e) => updateLineItem(index, 'carton', e.target.value)}
+                        disabled={isSubmitting || !li.item}
+                      />
+                    </td>
+
+                    {/* Damage Qty / Pieces */}
+                    <td className="border border-zinc-200 p-0 text-right">
+                      <input
+                        type="number"
+                        min="0"
+                        className="w-full h-full text-right bg-transparent border-0 focus:outline-hidden focus:ring-0 px-3 py-2 text-xs font-bold text-navy"
+                        value={li.pcs}
+                        onChange={(e) => updateLineItem(index, 'pcs', e.target.value)}
+                        disabled={isSubmitting || !li.item}
+                      />
+                    </td>
+
+                    {/* Issue Units */}
+                    <td className="border border-zinc-200 p-0 text-right">
+                      <input
+                        type="number"
+                        min="0"
+                        className="w-full h-full text-right bg-transparent border-0 focus:outline-hidden focus:ring-0 px-3 py-2 text-xs font-semibold"
+                        value={li.issue_units}
+                        onChange={(e) => updateLineItem(index, 'issue_units', e.target.value)}
+                        disabled={isSubmitting || !li.item}
+                      />
+                    </td>
+
+                    {/* Rate */}
+                    <td className="border border-zinc-200 p-0 text-right">
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        className="w-full h-full text-right bg-transparent border-0 focus:outline-hidden focus:ring-0 px-3 py-2 text-xs font-semibold"
+                        value={li.rate}
+                        onChange={(e) => updateLineItem(index, 'rate', e.target.value)}
+                        disabled={isSubmitting || !li.item}
+                      />
+                    </td>
+
+                    {/* Sales Tax Rate */}
+                    <td className="border border-zinc-200 p-0 text-right">
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        className="w-full h-full text-right bg-transparent border-0 focus:outline-hidden focus:ring-0 px-3 py-2 text-xs font-semibold"
+                        value={li.s_tax_rate}
+                        onChange={(e) => updateLineItem(index, 's_tax_rate', e.target.value)}
+                        disabled={isSubmitting || !li.item}
+                      />
+                    </td>
+
+                    {/* Sales Tax Amount */}
+                    <td className="border border-zinc-200 px-3 py-2 text-right text-zinc-600">
+                      {li.item ? `Rs. ${parseFloat(li.s_tax_amount).toFixed(2)}` : '—'}
+                    </td>
+
+                    {/* Gross Amount */}
+                    <td className="border border-zinc-200 px-3 py-2 text-right text-zinc-600">
+                      {li.item ? `Rs. ${parseFloat(li.gross_amount).toFixed(2)}` : '—'}
+                    </td>
+
+                    {/* Net */}
+                    <td className="border border-zinc-200 px-3 py-2 text-right text-navy font-bold">
+                      {li.item ? `Rs. ${parseFloat(li.net_amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
+                    </td>
+
+                    {/* Action delete & add */}
+                    <td className="border border-zinc-200 px-3 py-2 text-center">
+                      <div className="flex items-center justify-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={addEmptyLineItem}
+                          className="cursor-pointer text-emerald-600 hover:text-emerald-800 text-sm font-bold w-6 h-6 rounded hover:bg-emerald-50 transition-colors flex items-center justify-center border border-emerald-100"
+                          title="Add new line"
+                          disabled={isSubmitting}
+                        >
+                          ＋
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => removeLineItem(index)}
+                          className="cursor-pointer text-danger hover:text-red-700 text-sm font-bold w-6 h-6 rounded hover:bg-red-50 transition-colors flex items-center justify-center border border-red-100"
+                          title="Delete line"
+                          disabled={isSubmitting}
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+
+          <div className="pt-3 flex justify-start">
+            <button
+              type="button"
+              onClick={addEmptyLineItem}
+              className="cursor-pointer text-xs font-semibold px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-700 transition-all font-bold"
+              disabled={isSubmitting}
+            >
+              + Add a line
+            </button>
+          </div>
+        </div>
+
+        {/* Totals Summary */}
+        <div className="flex justify-end items-start pt-4">
+          <div className="border border-zinc-200 rounded-2xl p-5 w-full max-w-md space-y-3.5 text-xs text-zinc-700 font-semibold">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-navy mb-2">Grand Summary</h4>
+            
+            <div className="flex justify-between items-center text-zinc-600">
+              <span>Total Sales Tax Offsets</span>
+              <span>Rs. {parseFloat(sTax).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+            </div>
+
+            <div className="flex justify-between items-center text-primary text-sm font-bold pt-1.5 border-t border-dashed border-zinc-200">
+              <span>Total Net Amount</span>
+              <span>Rs. {grandTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Submit Actions */}
+        <div className="pt-4 border-t border-zinc-100 flex items-center justify-end gap-3">
+          <button
+            type="button"
+            onClick={() => navigate(`/branch/${branchSlug}/company/${companySlug}/damage-receiving`)}
+            className="cursor-pointer bg-zinc-100 hover:bg-zinc-200 text-zinc-700 text-xs font-bold px-5 py-2.5 rounded-xl transition-all"
+            disabled={isSubmitting}
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            className="cursor-pointer bg-primary hover:bg-primary-hover text-white text-xs font-bold px-6 py-2.5 rounded-xl transition-all shadow-xs"
+            disabled={isSubmitting}
+          >
+            {isSubmitting ? 'Saving Sheet...' : 'Save Damage Receiving'}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+};
