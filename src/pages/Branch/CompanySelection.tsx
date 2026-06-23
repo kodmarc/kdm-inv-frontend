@@ -107,43 +107,43 @@ export const CompanySelection: React.FC = () => {
     <div className="min-h-screen bg-slate-50">
 
       {/* Top header bar */}
-      <header style={{ background: '#0F172A' }} className="sticky top-0 z-40">
+      <header className="sticky top-0 z-40 border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3.5 sm:px-6">
 
           {/* Logo */}
-          <div className="flex items-center gap-2.5 shrink-0">
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600 text-white">
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-600 text-white">
+              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
               </svg>
             </span>
-            <span className="text-base font-black tracking-tight text-white">
-              KDM<span className="text-white/40">POS</span>
+            <span className="text-sm font-black tracking-tight text-slate-900">
+              KDM<span className="text-slate-300">POS</span>
             </span>
           </div>
 
           {/* Branch chip */}
           {branchSlug && (
-            <div className="hidden items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1 sm:flex">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-              <span className="text-xs font-medium text-white/70">Branch:</span>
-              <span className="text-xs font-bold uppercase text-white">{branchSlug}</span>
+            <div className="hidden items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 sm:flex">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+              <span className="text-xs font-medium text-slate-500">Branch:</span>
+              <span className="text-xs font-bold uppercase text-slate-800">{branchSlug}</span>
             </div>
           )}
 
           {/* Right: user + sign out */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5">
             {user && (
               <div className="hidden items-center gap-2 sm:flex">
                 <div className="flex h-7 w-7 items-center justify-center rounded-full bg-blue-600 text-[10px] font-bold text-white">
                   {initials(user.username)}
                 </div>
-                <span className="text-sm font-medium text-white/80">{user.username}</span>
+                <span className="text-sm font-medium text-slate-700">{user.username}</span>
               </div>
             )}
             <button
               onClick={logout}
-              className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-white/70 transition-colors hover:bg-white/10 hover:text-white"
+              className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-500 transition-colors hover:border-slate-300 hover:bg-slate-50 hover:text-slate-700"
             >
               <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
