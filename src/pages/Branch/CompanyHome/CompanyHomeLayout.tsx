@@ -212,7 +212,7 @@ const MANAGE_SUBS = ['items', 'categories', 'order-bookers', 'salesmen', 'partie
 const TRANSACTION_SUBS = ['purchase-invoice', 'sales-invoice', 'purchase-return', 'damage-return', 'damage-receiving', 'load-form', 'daily-sales-report'];
 
 export const CompanyHomeLayout: React.FC = () => {
-  const { user, logout } = useAuth();
+  const { user, logout, refreshUser } = useAuth();
   const { branchSlug, companySlug } = useParams<{ branchSlug: string; companySlug: string }>();
   const navigate = useNavigate();
   const location = useLocation();
@@ -278,6 +278,9 @@ export const CompanyHomeLayout: React.FC = () => {
   };
 
   useEffect(() => {
+    // refreshUser re-fetches /auth/me/ so the in-memory user profile reflects any policy
+    // changes the ORG_ADMIN made after this user logged in (e.g. toggling item_creation_policy).
+    refreshUser();
     fetchCompanies();
     fetchCategories();
     fetchItems();

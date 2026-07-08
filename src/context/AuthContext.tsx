@@ -22,6 +22,7 @@ interface AuthContextType {
   loginBranch: (orgId: string, branchSlug: string, role: string, username: string, password: string) => Promise<UserProfile>;
   signupOrg: (orgId: string, orgName: string, username: string, password: string) => Promise<UserProfile>;
   logout: () => Promise<void>;
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -31,14 +32,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
-  // Restore session on app load
+  // On every app load, check whether the access token cookie is still valid.
+  // This restores the session across page refreshes without requiring re-login.
+  // isLoading stays true until this resolves — ProtectedRoute waits for it to avoid
+  // flashing the user to /login on refresh when they are actually still authenticated.
   useEffect(() => {
     const restoreSession = async () => {
       try {
         const response = await api.get('/auth/me/');
         setUser(response.data);
         setIsAuthenticated(true);
-        
+
         // Inject CSRF token into default Axios headers for mutating requests
         if (response.data.csrf_token) {
           api.defaults.headers.common['X-CSRFToken'] = response.data.csrf_token;
@@ -53,7 +57,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     restoreSession();
   }, []);
 
-  // Listen to session expiration events from axios interceptors
+  // The Axios interceptor fires this event when a token refresh fails (both tokens expired).
+  // Listening here keeps auth state in sync with what the network layer detected.
   useEffect(() => {
     const handleSessionExpired = () => {
       setUser(null);
@@ -143,6 +148,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const refreshUser = async () => {
+    try {
+      const response = await api.get('/auth/me/');
+      setUser(response.data);
+      if (response.data.csrf_token) {
+        api.defaults.headers.common['X-CSRFToken'] = response.data.csrf_token;
+      }
+    } catch {
+      // silently ignore — session may have expired
+    }
+  };
+
   const logout = async () => {
     setIsLoading(true);
     try {
@@ -158,7 +175,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   return (
-    <AuthContext.Provider value={{ user, isAuthenticated, isLoading, loginOrg, loginBranch, signupOrg, logout }}>
+    <AuthContext.Provider value={{ user, isAuthenticated, isLoading, loginOrg, loginBranch, signupOrg, logout, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

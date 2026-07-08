@@ -1,5 +1,8 @@
 import axios from 'axios';
 
+// Single shared Axios instance — all API calls go through this.
+// withCredentials sends the HttpOnly JWT cookies cross-origin.
+// xsrf config aligns with Django's cookie name/header name for CSRF.
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL,
   withCredentials: true,
@@ -7,43 +10,43 @@ const api = axios.create({
   xsrfHeaderName: 'X-CSRFToken',
 });
 
-// Response interceptor to catch unauthorized errors (401) and attempt to refresh token
+// Intercept 401 responses and attempt a silent token refresh before failing.
+// Auth endpoints are excluded — a 401 from login/signup is a real failure, not an expiry.
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
-    
+
     const isAuthRequest = originalRequest.url?.includes('/auth/login-org') ||
                           originalRequest.url?.includes('/auth/login-branch') ||
                           originalRequest.url?.includes('/auth/signup') ||
                           originalRequest.url?.includes('/auth/logout');
 
-    // If the error is 401 (Unauthorized) and it is not a direct login/signup/logout request
     if (error.response?.status === 401 && !isAuthRequest) {
       if (!originalRequest._retry) {
         originalRequest._retry = true;
-        
+
         try {
-          // Call the refresh endpoint to get a new access token
+          // Use a bare axios call (not the shared `api` instance) to avoid hitting this
+          // interceptor recursively if the refresh endpoint itself returns 401.
           await axios.post(
             `${import.meta.env.VITE_API_URL}/auth/refresh/`,
             {},
             { withCredentials: true }
           );
-          
-          // Retry the original request
+
           return api(originalRequest);
         } catch (refreshError) {
-          // If refresh fails, notify the auth context to clear state
+          // Both tokens are expired or blacklisted — notify AuthContext to clear state.
           window.dispatchEvent(new Event('auth-session-expired'));
           return Promise.reject(refreshError);
         }
       } else {
-        // The retried request itself returned 401
+        // The retried request itself returned 401 — definitely expired, clear session.
         window.dispatchEvent(new Event('auth-session-expired'));
       }
     }
-    
+
     return Promise.reject(error);
   }
 );

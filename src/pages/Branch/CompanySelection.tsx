@@ -12,7 +12,7 @@ interface CompanyItem {
 }
 
 export const CompanySelection: React.FC = () => {
-  const { user, logout } = useAuth();
+  const { user, logout, refreshUser } = useAuth();
   const { branchSlug } = useParams<{ branchSlug: string }>();
   const navigate = useNavigate();
 
@@ -43,6 +43,7 @@ export const CompanySelection: React.FC = () => {
   };
 
   useEffect(() => {
+    refreshUser();
     fetchCompanies();
   }, []);
 

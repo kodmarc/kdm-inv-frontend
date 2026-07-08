@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import api from '../../services/api';
@@ -85,6 +85,9 @@ export const OrgLayout: React.FC = () => {
   const [isCompaniesLoading, setIsCompaniesLoading] = useState(false);
   const [isItemsLoading, setIsItemsLoading] = useState(false);
   const [isCategoriesLoading, setIsCategoriesLoading] = useState(false);
+  // Sequence counter prevents a stale fetchSettings response (from mount) from overwriting
+  // a freshly-saved value when the save triggers its own fetch immediately after.
+  const settingsFetchSeq = useRef(0);
 
   const [branchSuccess, setBranchSuccess] = useState('');
   const [branchError, setBranchError] = useState('');
@@ -119,9 +122,13 @@ export const OrgLayout: React.FC = () => {
   };
 
   const fetchSettings = async () => {
+    const mySeq = ++settingsFetchSeq.current;
     try {
       const res = await api.get('/org-admin/settings/');
-      setSettings(res.data);
+      // Only apply the response if no newer fetch has started since this one was dispatched.
+      if (mySeq === settingsFetchSeq.current) {
+        setSettings(res.data);
+      }
     } catch {
       console.error('Failed to load organization settings.');
     }
