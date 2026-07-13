@@ -37,7 +37,6 @@ export const OrgCompanies: React.FC = () => {
     companySuccess,
     setCompanySuccess,
     companyError,
-    setCompanyError,
   } = useOutletContext<OrgCompaniesContext>();
 
   const [showModal, setShowModal] = useState(false);

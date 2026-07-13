@@ -10,7 +10,7 @@ This covers the entry point pages for branch users before they get into a specif
 
 The first page a branch user sees after logging in. Renders at `/branch/:branchSlug/companies`.
 
-On mount it calls `refreshUser()` (to get fresh policy data) and then fetches all companies visible to the user's branch. Each company is displayed as a card with its name and code. Clicking a card navigates to:
+On mount it fetches all companies visible to the user's branch — the API returns only companies whose `branches` M2M includes the user's branch. Each company is displayed as a card with its name and code. Clicking a card navigates to:
 
 ```
 /branch/:branchSlug/company/:companyCode/home
@@ -18,7 +18,7 @@ On mount it calls `refreshUser()` (to get fresh policy data) and then fetches al
 
 The `:companyCode` in the URL is the company's code field in lowercase (not a UUID). This is what `CompanyHomeLayout` uses to identify `activeCompany`.
 
-If the branch has no companies yet, an empty state with a message is shown. If `company_creation_policy` is `'BRANCH_ADMIN'`, an Add Company button is available on this page. If `'ORG_ADMIN'`, the button is hidden.
+If no companies are assigned to the branch yet, an empty state with a message is shown. Companies are assigned to branches by HQ users in the Org Admin portal.
 
 ---
 

@@ -16,8 +16,6 @@ interface UserProfile {
   org_name: string | null;
   branch_slug: string | null;
   branch_name: string | null;
-  company_creation_policy?: 'ORG_ADMIN' | 'BRANCH_ADMIN' | null;
-  item_creation_policy?: 'ORG_ADMIN' | 'BRANCH_ADMIN' | null;
 }
 
 interface AuthContextType {
@@ -38,11 +36,13 @@ interface AuthContextType {
 
 ```typescript
 interface CompanyItem {
-  id: string; name: string; code: string; branch: string | null;
+  id: string; name: string; code: string;
+  branches: string[];           // slugs of branches this company is assigned to
 }
 
 interface ItemCategoryItem {
-  id: string; name: string; code: string; description?: string; branch: string | null;
+  id: string; name: string; code: string; description?: string;
+  // organization-scoped; no branch field
 }
 
 interface ItemItem {
@@ -55,7 +55,8 @@ interface ItemItem {
   discount_slab_qty?: string; discount_slab_rate?: string;
   min_stock?: string; max_stock?: string;
   current_stock?: string; damaged_stock?: string;
-  is_active: boolean; branch: string | null;
+  is_active: boolean;
+  // organization-scoped; no branch field
 }
 
 interface OrderBookerItem {

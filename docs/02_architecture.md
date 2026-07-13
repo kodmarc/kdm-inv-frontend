@@ -20,7 +20,6 @@ The entire route tree lives in `App.tsx`. Routes are organized into four section
 /org-admin/companies
 /org-admin/items
 /org-admin/users
-/org-admin/settings
 /org-admin/reports
 ```
 
