@@ -10,13 +10,17 @@ Every transaction form follows the same structure:
 
 It reads context from `CompanyHomeLayout` via `useOutletContext<CompanyHomeLayoutContextType>()` to get items, parties, accounts, and the active company without making its own fetch calls.
 
-On edit, it reads the `id` param from the URL and finds the corresponding invoice in the context's list (e.g. `purchaseInvoices.find(p => p.id === id)`), then pre-populates all form fields from it.
+On edit, Sales Invoice and Purchase Invoice find the record in the context's in-memory list (e.g. `purchaseInvoices.find(p => p.id === id)`) and pre-populate from it. Purchase Return, Damage Return, and Damage Receiving do a direct `GET /<type>/${id}/` API call on mount instead, because their lists are not pre-loaded into the layout context.
 
 On submit it calls `api.post(...)` for create or `api.patch(...)` for edit, then calls the layout's fetch function (e.g. `fetchPurchaseInvoices()`) to refresh the list, sets a success message via `setSuccess()`, and navigates back to the list page.
 
 The date field accepts flexible formats — `4 6 2025`, `4 jan 2025`, `4-6-2025`, ISO format — thanks to `parseFlexibleDate()` in each form. The parsed ISO date is sent to the API; the raw typed string is shown in the input.
 
 Line items are managed in local state as an array. Each row has a SearchableSelect for the item, and numeric fields for quantity, rate, and amounts. Adding a row appends an empty line item object. Removing a row splices it from the array.
+
+When a party or supplier is selected, five snapshot fields auto-populate from the party record and are displayed as read-only `<div>` elements (not editable inputs): NTN, GST Registration, Credit Limit, Outstanding Balance, and Credit Days. These values are captured at invoice creation time and stored on the transaction model.
+
+All numeric inputs in table cells include `onFocus={(e) => e.target.select()}` so that clicking into a cell (which often shows `0` or `0.00`) immediately selects the existing value, allowing the user to type a new value without manually clearing it first.
 
 ---
 

@@ -28,7 +28,7 @@ After a successful create or delete, calls `fetchBranches()` from the Outlet con
 
 Lists all companies in the organization. Supports creating, editing, and deleting companies.
 
-The Add Company button is visible regardless of `company_creation_policy` at the HQ level — HQ users always have this ability. Policy only restricts branch users.
+Each company is assigned to one or more branches via a Many-to-Many relationship. When creating or editing a company, a checkbox list of all branches is shown. The selected branch slugs are sent as the `branches` array in the payload. Branch users only see companies that include their branch in the `branches` list.
 
 Uses `companySuccess`, `companyError` from context for feedback.
 
@@ -40,9 +40,7 @@ Uses `companySuccess`, `companyError` from context for feedback.
 
 Lists items and item categories together on a tabbed or combined view. Supports creating, editing, and deleting items and categories.
 
-Items are displayed with fields: name, code, category, company, pack, purchase rate, sales rate, sales tax. Inactive items are visually distinguished.
-
-Same as companies — at HQ level, `item_creation_policy` does not restrict HQ users.
+Items and categories are organization-scoped — they are not tied to a specific branch. All branches within the organization share the same item catalog. Items are displayed with fields: name, code, category, company, pack, purchase rate, sales rate, sales tax. Inactive items are visually distinguished.
 
 ---
 
@@ -53,16 +51,6 @@ Same as companies — at HQ level, `item_creation_policy` does not restrict HQ u
 Lists all users in the organization. Supports creating new users with role and branch assignment. Only ORG_ADMIN can create users with elevated roles.
 
 When creating a branch user, the branch field is a select populated from the branches list in the Outlet context. HQ-level roles (ORG_ADMIN, ORG_USER) cannot be assigned a branch.
-
----
-
-## Settings — OrgSettings
-
-`src/pages/Org/OrgSettings.tsx`
-
-Allows ORG_ADMIN to update the organization name and the two creation policies.
-
-The form is pre-populated from `settings` in the Outlet context. On save, it calls `PUT /org-admin/settings/`, then calls `fetchSettings()` from the context to refresh. The `fetchSettings()` function uses a sequence counter to prevent stale responses from overwriting a freshly-saved value.
 
 ---
 

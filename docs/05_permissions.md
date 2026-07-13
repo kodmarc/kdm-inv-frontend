@@ -20,27 +20,6 @@ HQ routes are guarded by `['ORG_ADMIN', 'ORG_USER']`. Branch routes by `['BRANCH
 
 ---
 
-## Policy-Based Feature Gating
-
-Within branch pages, certain features (creating companies, creating items) are conditionally shown or hidden based on two policy fields from the user profile:
-
-`company_creation_policy` — either `'ORG_ADMIN'` or `'BRANCH_ADMIN'`
-`item_creation_policy` — either `'ORG_ADMIN'` or `'BRANCH_ADMIN'`
-
-When the policy is `'ORG_ADMIN'`, only HQ users should be able to create that resource and the Add button is hidden for branch users. When the policy is `'BRANCH_ADMIN'`, branch users see and can use the Add button.
-
-The backend enforces the same policy on every write request independently. The frontend hiding is a UX convenience, not a security boundary.
-
----
-
-## Keeping Policy Data Fresh
-
-Policy values are fields on the user profile (`user.company_creation_policy`, `user.item_creation_policy`). These are stored in AuthContext and set at login time.
-
-If the ORG_ADMIN changes a policy after a branch user has already logged in, that user's in-memory profile would have the old value. To handle this, `CompanySelection.tsx` and `CompanyHomeLayout.tsx` both call `refreshUser()` on mount. `refreshUser()` re-fetches `/auth/me/` and updates the user profile in AuthContext with the current server values.
-
----
-
 ## Admin-Only UI Elements
 
 Inside branch pages, the Control Panel link in the top nav is conditionally rendered:

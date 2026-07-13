@@ -38,9 +38,7 @@ The `_retry` flag on the original request config ensures the retry cycle only ru
 
 ## refreshUser
 
-`refreshUser()` is a function exposed from AuthContext that re-fetches `/auth/me/` and updates the user profile in state. It is called on mount by branch-level pages (`CompanySelection`, `CompanyHomeLayout`) to ensure the in-memory user profile reflects the current policy settings, even if those policies were changed by the ORG_ADMIN after the user logged in.
-
-Without this, branch users would see stale `company_creation_policy` and `item_creation_policy` values from login time.
+`refreshUser()` is a function exposed from AuthContext that re-fetches `/auth/me/` and updates the user profile in state. It can be called anywhere in the app to sync the in-memory user profile with the current server-side values — for example, after an admin changes a user's role or branch assignment.
 
 ---
 

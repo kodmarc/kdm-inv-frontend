@@ -12,9 +12,9 @@ All pages follow the same pattern: display a list from the context, open a modal
 
 Shows all items for the current company (already filtered by `companySlug` in the parent fetch). Each row shows: name, code, category, pack, purchase rate, sales rate, sales tax, current stock, damaged stock, active status.
 
-The Add Item button visibility depends on `user.item_creation_policy`. If `item_creation_policy` is `'ORG_ADMIN'`, branch users cannot add items and the button is hidden. If `'BRANCH_ADMIN'`, the button appears.
+Items are organization-scoped — they are defined at the HQ level under `/org-admin/items` and are not created or edited from the branch portal. The branch view is read-only for item details; stock levels update automatically through transactions.
 
-Creating or editing an item calls `fetchItems()` after save. Items can be soft-disabled via the `is_active` toggle rather than deleted.
+Items can be soft-disabled via the `is_active` toggle. Calling `fetchItems()` after any mutation refreshes the list.
 
 ---
 
@@ -22,7 +22,7 @@ Creating or editing an item calls `fetchItems()` after save. Items can be soft-d
 
 `src/pages/Branch/CompanyHome/manage/ItemCategories.tsx`
 
-Lists item categories. Supports create, edit. Category visibility for the Add button follows the same `item_creation_policy` rule as items.
+Lists item categories. Categories are organization-scoped (no branch FK) and are managed by HQ. The branch view allows browsing categories for the active company.
 
 ---
 

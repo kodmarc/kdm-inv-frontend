@@ -10,19 +10,17 @@ There are two major layout components that structure the two main areas of the a
 
 The HQ admin shell. Renders a fixed left sidebar with navigation, a top header bar showing the page title, and the main content area where child pages render via `<Outlet>`.
 
-On mount it fetches: branches, users, org settings, companies, items, and item categories. All of these are stored in local state and passed to child pages through the Outlet context.
+On mount it fetches: branches, users, companies, items, and item categories. All of these are stored in local state and passed to child pages through the Outlet context.
 
-The settings fetch uses a sequence counter (`settingsFetchSeq` ref) to prevent race conditions — if a fast settings save triggers a new fetch that resolves before the earlier mount fetch, the stale response is ignored. Only the most recent fetch response is applied to state.
-
-Navigation items: Dashboard, Branches, Companies, Item Catalog, User Management, Settings, Reports. Each nav item uses `useLocation` to detect the active path and applies active styling.
+Navigation items: Dashboard, Branches, Companies, Item Catalog, User Management, Reports. Each nav item uses `useLocation` to detect the active path and applies active styling.
 
 The sidebar also shows the logged-in user's initials, username, and role, plus a Sign Out button.
 
 Outlet context shape:
 ```typescript
 {
-  branches, users, settings, companies, items, categories,
-  fetchBranches, fetchUsers, fetchSettings, fetchCompanies, fetchItems, fetchCategories,
+  branches, users, companies, items, categories,
+  fetchBranches, fetchUsers, fetchCompanies, fetchItems, fetchCategories,
   isUsersLoading, isCompaniesLoading, isItemsLoading, isCategoriesLoading,
   branchSuccess, setBranchSuccess, branchError, setBranchError,
   userSuccess, setUserSuccess, userError, setUserError,
@@ -40,7 +38,7 @@ Outlet context shape:
 
 The branch operator shell. Renders a horizontal top navigation bar and the main content area.
 
-On mount (and whenever `companySlug` changes) it calls `refreshUser()` then fetches all data for the current company context: companies, categories, items (filtered by `?company_code=companySlug`), order-bookers, salesmen, parties, accounts, sales invoices, and purchase invoices.
+On mount (and whenever `companySlug` changes) it fetches all data for the current company context: companies, categories, items (filtered by `?company_code=companySlug`), order-bookers, salesmen, parties, accounts, sales invoices, and purchase invoices.
 
 The active company is derived by matching `companySlug` from the URL against the companies list: `companies.find(c => c.code.toLowerCase() === companySlug?.toLowerCase())`.
 
@@ -58,6 +56,6 @@ Outlet context type: `CompanyHomeLayoutContextType` (exported interface from the
 
 `src/pages/Branch/CompanySelection.tsx`
 
-Not a layout but an entry point for branch sessions. Rendered at `/branch/:branchSlug/companies`. Shows a list of companies the branch user has access to. On mount calls `refreshUser()` to get fresh policy data, then fetches companies.
+Not a layout but an entry point for branch sessions. Rendered at `/branch/:branchSlug/companies`. Shows a list of companies the branch user has access to — only companies whose `branches` M2M includes the user's branch are returned by the API.
 
 Clicking a company card navigates to `/branch/:branchSlug/company/:companyCode/home`.
