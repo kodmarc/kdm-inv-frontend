@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import api from '../../services/api';
-import { Button, Input, Badge, Modal } from '../../components/ui';
+import { Button, Input, Modal } from '../../components/ui';
 
 interface ItemItem {
   id: string;
@@ -25,7 +25,6 @@ interface ItemItem {
   min_stock?: string;
   max_stock?: string;
   is_active: boolean;
-  branch: string | null;
   created_at: string;
 }
 
@@ -34,7 +33,6 @@ interface ItemCategoryItem {
   name: string;
   code: string;
   description?: string;
-  branch: string | null;
   created_at: string;
 }
 
@@ -44,22 +42,10 @@ interface CompanyItem {
   code: string;
 }
 
-interface BranchItem {
-  id: string;
-  name: string;
-  slug: string;
-}
-
-interface OrgSettings {
-  item_creation_policy: 'ORG_ADMIN' | 'BRANCH_ADMIN';
-}
-
 interface OrgItemsContext {
   items: ItemItem[];
   categories: ItemCategoryItem[];
   companies: CompanyItem[];
-  branches: BranchItem[];
-  settings: OrgSettings | null;
   fetchItems: () => Promise<void>;
   fetchCategories: () => Promise<void>;
   isItemsLoading: boolean;
@@ -79,7 +65,7 @@ const labelCls = 'block text-xs font-semibold text-slate-700 mb-1.5';
 
 export const OrgItems: React.FC = () => {
   const {
-    items, categories, companies, branches, settings,
+    items, categories, companies,
     fetchItems, fetchCategories,
     isItemsLoading, isCategoriesLoading,
     itemSuccess, setItemSuccess, itemError,
@@ -90,7 +76,7 @@ export const OrgItems: React.FC = () => {
   const [itemSearch, setItemSearch] = useState('');
   const [categorySearch, setCategorySearch] = useState('');
 
-  // Item modal
+  // Item modal state
   const [showItemModal, setShowItemModal] = useState(false);
   const [itemName, setItemName] = useState('');
   const [itemCode, setItemCode] = useState('');
@@ -108,16 +94,14 @@ export const OrgItems: React.FC = () => {
   const [itemDiscountSlabRate, setItemDiscountSlabRate] = useState('');
   const [itemMinStock, setItemMinStock] = useState('');
   const [itemMaxStock, setItemMaxStock] = useState('');
-  const [itemBranchSlug, setItemBranchSlug] = useState('');
   const [modalItemError, setModalItemError] = useState('');
   const [itemFieldErrors, setItemFieldErrors] = useState<Record<string, string>>({});
 
-  // Category modal
+  // Category modal state
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [categoryName, setCategoryName] = useState('');
   const [categoryCode, setCategoryCode] = useState('');
   const [categoryDesc, setCategoryDesc] = useState('');
-  const [categoryBranchSlug, setCategoryBranchSlug] = useState('');
   const [modalCategoryError, setModalCategoryError] = useState('');
   const [categoryFieldErrors, setCategoryFieldErrors] = useState<Record<string, string>>({});
 
@@ -129,19 +113,24 @@ export const OrgItems: React.FC = () => {
     if (!cleanName) return;
     if (!itemCategory) { setModalItemError('Category is required.'); return; }
 
-    const payload: any = {
-      name: cleanName, category: itemCategory,
-      sku: itemSku.trim() || null, company: itemCompany || null,
+    const payload: Record<string, unknown> = {
+      name: cleanName,
+      category: itemCategory,
+      sku: itemSku.trim() || null,
+      company: itemCompany || null,
       pack: itemPack ? parseInt(itemPack, 10) : null,
       grammage: itemGrammage.trim() || null,
-      purchase_rate: itemPurchaseRate || null, sales_rate: itemSalesRate || null,
-      purchase_tax: itemPurchaseTax || null, sales_tax: itemSalesTax || null,
+      purchase_rate: itemPurchaseRate || null,
+      sales_rate: itemSalesRate || null,
+      purchase_tax: itemPurchaseTax || null,
+      sales_tax: itemSalesTax || null,
       federal_tax: itemFederalTax || null,
-      discount_slab_qty: itemDiscountSlabQty || null, discount_slab_rate: itemDiscountSlabRate || null,
-      min_stock: itemMinStock || null, max_stock: itemMaxStock || null,
+      discount_slab_qty: itemDiscountSlabQty || null,
+      discount_slab_rate: itemDiscountSlabRate || null,
+      min_stock: itemMinStock || null,
+      max_stock: itemMaxStock || null,
     };
     if (itemCode.trim()) payload.code = itemCode.trim();
-    if (settings?.item_creation_policy === 'BRANCH_ADMIN' && itemBranchSlug) payload.branch = itemBranchSlug;
 
     try {
       await api.post('/items/', payload);
@@ -169,9 +158,11 @@ export const OrgItems: React.FC = () => {
     const cleanName = categoryName.trim();
     if (!cleanName) return;
 
-    const payload: any = { name: cleanName, description: categoryDesc.trim() || null };
+    const payload: Record<string, unknown> = {
+      name: cleanName,
+      description: categoryDesc.trim() || null,
+    };
     if (categoryCode.trim()) payload.code = categoryCode.trim();
-    if (settings?.item_creation_policy === 'BRANCH_ADMIN' && categoryBranchSlug) payload.branch = categoryBranchSlug;
 
     try {
       await api.post('/item-categories/', payload);
@@ -199,13 +190,13 @@ export const OrgItems: React.FC = () => {
     setItemPurchaseRate(''); setItemSalesRate('');
     setItemPurchaseTax(''); setItemSalesTax(''); setItemFederalTax('');
     setItemDiscountSlabQty(''); setItemDiscountSlabRate('');
-    setItemMinStock(''); setItemMaxStock(''); setItemBranchSlug('');
+    setItemMinStock(''); setItemMaxStock('');
     setModalItemError(''); setItemFieldErrors({});
     setShowItemModal(true);
   };
 
   const openCategoryModal = () => {
-    setCategoryName(''); setCategoryCode(''); setCategoryDesc(''); setCategoryBranchSlug('');
+    setCategoryName(''); setCategoryCode(''); setCategoryDesc('');
     setModalCategoryError(''); setCategoryFieldErrors({});
     setShowCategoryModal(true);
   };
@@ -229,9 +220,7 @@ export const OrgItems: React.FC = () => {
       <div>
         <h1 className="text-2xl font-bold text-slate-900">Item & Category Catalog</h1>
         <p className="mt-1 text-sm text-slate-500">
-          {settings?.item_creation_policy === 'ORG_ADMIN'
-            ? 'Centralized mode — HQ manages all items and categories globally.'
-            : 'Decentralized mode — branches create and manage their own items locally.'}
+          Manage all items and categories from HQ. Items are visible to branches via company assignment.
         </p>
       </div>
 
@@ -260,7 +249,7 @@ export const OrgItems: React.FC = () => {
         ].map((tab) => (
           <button
             key={tab.key}
-            onClick={() => setActiveTab(tab.key as any)}
+            onClick={() => setActiveTab(tab.key as 'catalog' | 'categories')}
             className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px ${
               activeTab === tab.key
                 ? 'border-blue-600 text-blue-600'
@@ -298,14 +287,12 @@ export const OrgItems: React.FC = () => {
                   className="pl-8 pr-3 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 w-48"
                 />
               </div>
-              {settings?.item_creation_policy === 'ORG_ADMIN' && (
-                <Button onClick={openItemModal} size="sm" disabled={categories.length === 0}>
-                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-                  </svg>
-                  Add Item
-                </Button>
-              )}
+              <Button onClick={openItemModal} size="sm" disabled={categories.length === 0}>
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                </svg>
+                Add Item
+              </Button>
             </div>
           </div>
 
@@ -339,44 +326,33 @@ export const OrgItems: React.FC = () => {
                     <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Company</th>
                     <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Pack / Wt</th>
                     <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Buy / Sell</th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Scope</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {filteredItems.map((item) => {
-                    const scopeName = item.branch
-                      ? (branches.find(b => b.slug === item.branch)?.name || item.branch)
-                      : null;
-                    return (
-                      <tr key={item.id} className="hover:bg-slate-50 transition-colors">
-                        <td className="px-6 py-4 font-medium text-slate-900 whitespace-nowrap">{item.name}</td>
-                        <td className="px-6 py-4">
-                          <code className="text-xs text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded font-mono">{item.code}</code>
-                          {item.sku && <div className="text-xs text-slate-400 mt-0.5">SKU: {item.sku}</div>}
-                        </td>
-                        <td className="px-6 py-4">
-                          <Badge color="blue">{item.category_name}</Badge>
-                        </td>
-                        <td className="px-6 py-4 text-slate-500 whitespace-nowrap">{item.company_name || '—'}</td>
-                        <td className="px-6 py-4 text-slate-500">
-                          {item.pack && <div className="text-xs">×{item.pack}</div>}
-                          {item.grammage && <div className="text-xs text-slate-400">{item.grammage}</div>}
-                          {!item.pack && !item.grammage && '—'}
-                        </td>
-                        <td className="px-6 py-4">
-                          {item.purchase_rate ? (
-                            <div className="text-xs space-y-0.5">
-                              <div className="text-slate-500">Buy: <span className="font-medium text-slate-900">Rs. {item.purchase_rate}</span></div>
-                              {item.sales_rate && <div className="text-slate-500">Sell: <span className="font-medium text-slate-900">Rs. {item.sales_rate}</span></div>}
-                            </div>
-                          ) : '—'}
-                        </td>
-                        <td className="px-6 py-4">
-                          <Badge color={scopeName ? 'blue' : 'slate'}>{scopeName || 'Global'}</Badge>
-                        </td>
-                      </tr>
-                    );
-                  })}
+                  {filteredItems.map((item) => (
+                    <tr key={item.id} className="hover:bg-slate-50 transition-colors">
+                      <td className="px-6 py-4 font-medium text-slate-900 whitespace-nowrap">{item.name}</td>
+                      <td className="px-6 py-4">
+                        <code className="text-xs text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded font-mono">{item.code}</code>
+                        {item.sku && <div className="text-xs text-slate-400 mt-0.5">SKU: {item.sku}</div>}
+                      </td>
+                      <td className="px-6 py-4 text-slate-600">{item.category_name}</td>
+                      <td className="px-6 py-4 text-slate-500 whitespace-nowrap">{item.company_name || '—'}</td>
+                      <td className="px-6 py-4 text-slate-500">
+                        {item.pack && <div className="text-xs">×{item.pack}</div>}
+                        {item.grammage && <div className="text-xs text-slate-400">{item.grammage}</div>}
+                        {!item.pack && !item.grammage && '—'}
+                      </td>
+                      <td className="px-6 py-4">
+                        {item.purchase_rate ? (
+                          <div className="text-xs space-y-0.5">
+                            <div className="text-slate-500">Buy: <span className="font-medium text-slate-900">Rs. {item.purchase_rate}</span></div>
+                            {item.sales_rate && <div className="text-slate-500">Sell: <span className="font-medium text-slate-900">Rs. {item.sales_rate}</span></div>}
+                          </div>
+                        ) : '—'}
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
@@ -405,14 +381,12 @@ export const OrgItems: React.FC = () => {
                   className="pl-8 pr-3 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 w-48"
                 />
               </div>
-              {settings?.item_creation_policy === 'ORG_ADMIN' && (
-                <Button onClick={openCategoryModal} size="sm">
-                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-                  </svg>
-                  Add Category
-                </Button>
-              )}
+              <Button onClick={openCategoryModal} size="sm">
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                </svg>
+                Add Category
+              </Button>
             </div>
           </div>
 
@@ -439,27 +413,18 @@ export const OrgItems: React.FC = () => {
                   <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Category Name</th>
                   <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Code</th>
                   <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Description</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Scope</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {filteredCats.map((cat) => {
-                  const scopeName = cat.branch
-                    ? (branches.find(b => b.slug === cat.branch)?.name || cat.branch)
-                    : null;
-                  return (
-                    <tr key={cat.id} className="hover:bg-slate-50 transition-colors">
-                      <td className="px-6 py-4 font-medium text-slate-900">{cat.name}</td>
-                      <td className="px-6 py-4">
-                        <code className="text-xs text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded font-mono">{cat.code}</code>
-                      </td>
-                      <td className="px-6 py-4 text-slate-500">{cat.description || '—'}</td>
-                      <td className="px-6 py-4">
-                        <Badge color={scopeName ? 'blue' : 'slate'}>{scopeName || 'Global'}</Badge>
-                      </td>
-                    </tr>
-                  );
-                })}
+                {filteredCats.map((cat) => (
+                  <tr key={cat.id} className="hover:bg-slate-50 transition-colors">
+                    <td className="px-6 py-4 font-medium text-slate-900">{cat.name}</td>
+                    <td className="px-6 py-4">
+                      <code className="text-xs text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded font-mono">{cat.code}</code>
+                    </td>
+                    <td className="px-6 py-4 text-slate-500">{cat.description || '—'}</td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           )}
@@ -502,16 +467,6 @@ export const OrgItems: React.FC = () => {
                 {companies.map(c => <option key={c.id} value={c.id}>{c.name} ({c.code})</option>)}
               </select>
             </div>
-            {settings?.item_creation_policy === 'BRANCH_ADMIN' && (
-              <div className="flex flex-col">
-                <label className={labelCls}>Target Branch *</label>
-                <select value={itemBranchSlug} onChange={(e) => setItemBranchSlug(e.target.value)} required className={inputCls}>
-                  <option value="">Select Branch...</option>
-                  {branches.map(b => <option key={b.slug} value={b.slug}>{b.name}</option>)}
-                </select>
-                {itemFieldErrors.branch && <span className="text-[11px] font-semibold text-red-600 mt-1">{itemFieldErrors.branch}</span>}
-              </div>
-            )}
           </div>
 
           <div>
@@ -561,16 +516,6 @@ export const OrgItems: React.FC = () => {
             <label className={labelCls}>Description (optional)</label>
             <textarea rows={3} value={categoryDesc} onChange={(e) => setCategoryDesc(e.target.value)} placeholder="Provide category description..." className={`${inputCls} resize-none`} />
           </div>
-          {settings?.item_creation_policy === 'BRANCH_ADMIN' && (
-            <div className="flex flex-col">
-              <label className={labelCls}>Target Branch *</label>
-              <select value={categoryBranchSlug} onChange={(e) => setCategoryBranchSlug(e.target.value)} required className={inputCls}>
-                <option value="">Select Branch...</option>
-                {branches.map(b => <option key={b.slug} value={b.slug}>{b.name}</option>)}
-              </select>
-              {categoryFieldErrors.branch && <span className="text-[11px] font-semibold text-red-600 mt-1">{categoryFieldErrors.branch}</span>}
-            </div>
-          )}
           <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
             <Button type="button" variant="surface" onClick={() => setShowCategoryModal(false)}>Cancel</Button>
             <Button type="submit">Register Category</Button>

@@ -586,63 +586,41 @@ export const DamageReceivingForm: React.FC = () => {
           {/* NTN */}
           <div className="flex flex-col gap-1.5">
             <label className="text-[10px] font-bold text-zinc-500 uppercase">NTN</label>
-            <input
-              type="text"
-              className="text-xs border border-zinc-200 rounded-xl px-3 py-2.5 bg-white font-bold outline-hidden focus:outline-hidden"
-              value={ntn}
-              onChange={(e) => setNtn(e.target.value)}
-              disabled={isSubmitting}
-            />
+            <div className="text-xs border border-zinc-100 rounded-xl px-3 py-2.5 bg-zinc-50 font-bold text-zinc-600 min-h-[38px] flex items-center">
+              {ntn || '—'}
+            </div>
           </div>
 
           {/* GST */}
           <div className="flex flex-col gap-1.5">
             <label className="text-[10px] font-bold text-zinc-500 uppercase">GST Registration</label>
-            <input
-              type="text"
-              className="text-xs border border-zinc-200 rounded-xl px-3 py-2.5 bg-white font-bold outline-hidden focus:outline-hidden"
-              value={gstNo}
-              onChange={(e) => setGstNo(e.target.value)}
-              disabled={isSubmitting}
-            />
+            <div className="text-xs border border-zinc-100 rounded-xl px-3 py-2.5 bg-zinc-50 font-bold text-zinc-600 min-h-[38px] flex items-center">
+              {gstNo || '—'}
+            </div>
           </div>
 
           {/* Credit Limit */}
           <div className="flex flex-col gap-1.5">
             <label className="text-[10px] font-bold text-zinc-500 uppercase">Credit Limit (Rs.)</label>
-            <input
-              type="number"
-              step="0.01"
-              className="text-xs border border-zinc-200 rounded-xl px-3 py-2.5 bg-white font-bold outline-hidden focus:outline-hidden"
-              value={creditLimit}
-              onChange={(e) => setCreditLimit(e.target.value)}
-              disabled={isSubmitting}
-            />
+            <div className="text-xs border border-zinc-100 rounded-xl px-3 py-2.5 bg-zinc-50 font-bold text-zinc-600 min-h-[38px] flex items-center">
+              {party ? `Rs. ${parseFloat(creditLimit).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
+            </div>
           </div>
 
           {/* Outstanding Balance */}
           <div className="flex flex-col gap-1.5">
             <label className="text-[10px] font-bold text-zinc-500 uppercase">Outstanding Bal. (Rs.)</label>
-            <input
-              type="number"
-              step="0.01"
-              className="text-xs border border-zinc-200 rounded-xl px-3 py-2.5 bg-white font-bold outline-hidden focus:outline-hidden"
-              value={balanceAmount}
-              onChange={(e) => setBalanceAmount(e.target.value)}
-              disabled={isSubmitting}
-            />
+            <div className="text-xs border border-zinc-100 rounded-xl px-3 py-2.5 bg-zinc-50 font-bold text-zinc-600 min-h-[38px] flex items-center">
+              {party ? `Rs. ${parseFloat(balanceAmount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
+            </div>
           </div>
 
           {/* Credit Days Allowed */}
           <div className="flex flex-col gap-1.5">
             <label className="text-[10px] font-bold text-zinc-500 uppercase">Credit Days Allowed</label>
-            <input
-              type="number"
-              className="text-xs border border-zinc-200 rounded-xl px-3 py-2.5 bg-white font-bold outline-hidden focus:outline-hidden"
-              value={creditDays}
-              onChange={(e) => setCreditDays(parseInt(e.target.value, 10) || 0)}
-              disabled={isSubmitting}
-            />
+            <div className="text-xs border border-zinc-100 rounded-xl px-3 py-2.5 bg-zinc-50 font-bold text-zinc-600 min-h-[38px] flex items-center">
+              {party ? `${creditDays} day${creditDays !== 1 ? 's' : ''}` : '—'}
+            </div>
           </div>
         </div>
 
@@ -702,6 +680,7 @@ export const DamageReceivingForm: React.FC = () => {
                         className="w-full h-full text-right bg-transparent border-0 focus:outline-hidden focus:ring-0 px-3 py-2 text-xs font-semibold"
                         value={li.carton}
                         onChange={(e) => updateLineItem(index, 'carton', e.target.value)}
+                        onFocus={(e) => e.target.select()}
                         disabled={isSubmitting || !li.item}
                       />
                     </td>
@@ -714,6 +693,7 @@ export const DamageReceivingForm: React.FC = () => {
                         className="w-full h-full text-right bg-transparent border-0 focus:outline-hidden focus:ring-0 px-3 py-2 text-xs font-bold text-navy"
                         value={li.pcs}
                         onChange={(e) => updateLineItem(index, 'pcs', e.target.value)}
+                        onFocus={(e) => e.target.select()}
                         disabled={isSubmitting || !li.item}
                       />
                     </td>
@@ -726,6 +706,7 @@ export const DamageReceivingForm: React.FC = () => {
                         className="w-full h-full text-right bg-transparent border-0 focus:outline-hidden focus:ring-0 px-3 py-2 text-xs font-semibold"
                         value={li.issue_units}
                         onChange={(e) => updateLineItem(index, 'issue_units', e.target.value)}
+                        onFocus={(e) => e.target.select()}
                         disabled={isSubmitting || !li.item}
                       />
                     </td>
@@ -739,6 +720,7 @@ export const DamageReceivingForm: React.FC = () => {
                         className="w-full h-full text-right bg-transparent border-0 focus:outline-hidden focus:ring-0 px-3 py-2 text-xs font-semibold"
                         value={li.rate}
                         onChange={(e) => updateLineItem(index, 'rate', e.target.value)}
+                        onFocus={(e) => e.target.select()}
                         disabled={isSubmitting || !li.item}
                       />
                     </td>
@@ -752,6 +734,7 @@ export const DamageReceivingForm: React.FC = () => {
                         className="w-full h-full text-right bg-transparent border-0 focus:outline-hidden focus:ring-0 px-3 py-2 text-xs font-semibold"
                         value={li.s_tax_rate}
                         onChange={(e) => updateLineItem(index, 's_tax_rate', e.target.value)}
+                        onFocus={(e) => e.target.select()}
                         disabled={isSubmitting || !li.item}
                       />
                     </td>

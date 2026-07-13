@@ -7,7 +7,7 @@ export interface CompanyItem {
   id: string;
   name: string;
   code: string;
-  branch: string | null;
+  branches: string[];
 }
 
 export interface ItemCategoryItem {
@@ -15,7 +15,6 @@ export interface ItemCategoryItem {
   name: string;
   code: string;
   description?: string;
-  branch: string | null;
 }
 
 export interface ItemItem {
@@ -40,7 +39,6 @@ export interface ItemItem {
   min_stock?: string;
   max_stock?: string;
   is_active: boolean;
-  branch: string | null;
   current_stock?: string;
   damaged_stock?: string;
 }
@@ -212,7 +210,7 @@ const MANAGE_SUBS = ['items', 'categories', 'order-bookers', 'salesmen', 'partie
 const TRANSACTION_SUBS = ['purchase-invoice', 'sales-invoice', 'purchase-return', 'damage-return', 'damage-receiving', 'load-form', 'daily-sales-report'];
 
 export const CompanyHomeLayout: React.FC = () => {
-  const { user, logout, refreshUser } = useAuth();
+  const { user, logout } = useAuth();
   const { branchSlug, companySlug } = useParams<{ branchSlug: string; companySlug: string }>();
   const navigate = useNavigate();
   const location = useLocation();
@@ -278,9 +276,6 @@ export const CompanyHomeLayout: React.FC = () => {
   };
 
   useEffect(() => {
-    // refreshUser re-fetches /auth/me/ so the in-memory user profile reflects any policy
-    // changes the ORG_ADMIN made after this user logged in (e.g. toggling item_creation_policy).
-    refreshUser();
     fetchCompanies();
     fetchCategories();
     fetchItems();

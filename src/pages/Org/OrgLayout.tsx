@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import api from '../../services/api';
@@ -19,18 +19,11 @@ interface UserItem {
   is_active: boolean;
 }
 
-interface OrgSettings {
-  name: string;
-  org_id: string;
-  company_creation_policy: 'ORG_ADMIN' | 'BRANCH_ADMIN';
-  item_creation_policy: 'ORG_ADMIN' | 'BRANCH_ADMIN';
-}
-
 interface CompanyItem {
   id: string;
   name: string;
   code: string;
-  branch: string | null;
+  branches: string[];
   created_at: string;
 }
 
@@ -39,7 +32,6 @@ interface ItemCategoryItem {
   name: string;
   code: string;
   description?: string;
-  branch: string | null;
   created_at: string;
 }
 
@@ -64,8 +56,9 @@ interface ItemItem {
   discount_slab_rate?: string;
   min_stock?: string;
   max_stock?: string;
+  current_stock?: string;
+  damaged_stock?: string;
   is_active: boolean;
-  branch: string | null;
   created_at: string;
 }
 
@@ -76,7 +69,6 @@ export const OrgLayout: React.FC = () => {
 
   const [branches, setBranches] = useState<BranchItem[]>([]);
   const [users, setUsers] = useState<UserItem[]>([]);
-  const [settings, setSettings] = useState<OrgSettings | null>(null);
   const [companies, setCompanies] = useState<CompanyItem[]>([]);
   const [items, setItems] = useState<ItemItem[]>([]);
   const [categories, setCategories] = useState<ItemCategoryItem[]>([]);
@@ -85,9 +77,6 @@ export const OrgLayout: React.FC = () => {
   const [isCompaniesLoading, setIsCompaniesLoading] = useState(false);
   const [isItemsLoading, setIsItemsLoading] = useState(false);
   const [isCategoriesLoading, setIsCategoriesLoading] = useState(false);
-  // Sequence counter prevents a stale fetchSettings response (from mount) from overwriting
-  // a freshly-saved value when the save triggers its own fetch immediately after.
-  const settingsFetchSeq = useRef(0);
 
   const [branchSuccess, setBranchSuccess] = useState('');
   const [branchError, setBranchError] = useState('');
@@ -118,19 +107,6 @@ export const OrgLayout: React.FC = () => {
       setUserError('Failed to load organization users.');
     } finally {
       setIsUsersLoading(false);
-    }
-  };
-
-  const fetchSettings = async () => {
-    const mySeq = ++settingsFetchSeq.current;
-    try {
-      const res = await api.get('/org-admin/settings/');
-      // Only apply the response if no newer fetch has started since this one was dispatched.
-      if (mySeq === settingsFetchSeq.current) {
-        setSettings(res.data);
-      }
-    } catch {
-      console.error('Failed to load organization settings.');
     }
   };
 
@@ -176,7 +152,6 @@ export const OrgLayout: React.FC = () => {
   useEffect(() => {
     fetchBranches();
     fetchUsers();
-    fetchSettings();
     fetchCompanies();
     fetchItems();
     fetchCategories();
@@ -229,16 +204,6 @@ export const OrgLayout: React.FC = () => {
       ),
     },
     {
-      path: '/org-admin/settings',
-      label: 'Settings',
-      icon: (
-        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-          <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-        </svg>
-      ),
-    },
-    {
       path: '/org-admin/reports',
       label: 'Reports',
       icon: (
@@ -255,7 +220,6 @@ export const OrgLayout: React.FC = () => {
     '/org-admin/companies': 'Company Catalogs',
     '/org-admin/items': 'Item & Category Catalog',
     '/org-admin/users': 'User Management',
-    '/org-admin/settings': 'Governance Settings',
     '/org-admin/reports': 'Analytics & Reports',
   };
 
@@ -355,13 +319,11 @@ export const OrgLayout: React.FC = () => {
               context={{
                 branches,
                 users,
-                settings,
                 companies,
                 items,
                 categories,
                 fetchBranches,
                 fetchUsers,
-                fetchSettings,
                 fetchCompanies,
                 fetchItems,
                 fetchCategories,

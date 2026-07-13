@@ -1,13 +1,13 @@
 import React, { useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import api from '../../services/api';
-import { Button, Input, Badge, Modal } from '../../components/ui';
+import { Button, Input, Modal } from '../../components/ui';
 
 interface CompanyItem {
   id: string;
   name: string;
   code: string;
-  branch: string | null;
+  branches: string[];
   created_at: string;
 }
 
@@ -17,14 +17,9 @@ interface BranchItem {
   slug: string;
 }
 
-interface OrgSettings {
-  company_creation_policy: 'ORG_ADMIN' | 'BRANCH_ADMIN';
-}
-
 interface OrgCompaniesContext {
   companies: CompanyItem[];
   branches: BranchItem[];
-  settings: OrgSettings | null;
   fetchCompanies: () => Promise<void>;
   isCompaniesLoading: boolean;
   companySuccess: string;
@@ -37,22 +32,51 @@ export const OrgCompanies: React.FC = () => {
   const {
     companies,
     branches,
-    settings,
     fetchCompanies,
     isCompaniesLoading,
     companySuccess,
     setCompanySuccess,
     companyError,
+    setCompanyError,
   } = useOutletContext<OrgCompaniesContext>();
 
   const [showModal, setShowModal] = useState(false);
+  const [editCompany, setEditCompany] = useState<CompanyItem | null>(null);
   const [companyName, setCompanyName] = useState('');
   const [companyCode, setCompanyCode] = useState('');
+  const [selectedBranches, setSelectedBranches] = useState<string[]>([]);
   const [modalError, setModalError] = useState('');
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [search, setSearch] = useState('');
 
-  const handleCreate = async (e: React.FormEvent) => {
+  const openCreateModal = () => {
+    setEditCompany(null);
+    setCompanyName('');
+    setCompanyCode('');
+    setSelectedBranches([]);
+    setModalError('');
+    setFieldErrors({});
+    setShowModal(true);
+  };
+
+  const openEditModal = (company: CompanyItem) => {
+    setEditCompany(company);
+    setCompanyName(company.name);
+    setCompanyCode(company.code);
+    setSelectedBranches(company.branches || []);
+    setModalError('');
+    setFieldErrors({});
+    setShowModal(true);
+  };
+
+  const toggleBranch = (slug: string) => {
+    setSelectedBranches(prev =>
+      prev.includes(slug) ? prev.filter(s => s !== slug) : [...prev, slug]
+    );
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setModalError('');
     setFieldErrors({});
@@ -60,14 +84,21 @@ export const OrgCompanies: React.FC = () => {
     const cleanName = companyName.trim();
     if (!cleanName) return;
 
-    const payload: any = { name: cleanName };
+    const payload: Record<string, unknown> = {
+      name: cleanName,
+      branches: selectedBranches,
+    };
     if (companyCode.trim()) payload.code = companyCode.trim();
 
+    setIsSubmitting(true);
     try {
-      await api.post('/companies/', payload);
-      setCompanySuccess('Company catalog registered successfully.');
-      setCompanyName('');
-      setCompanyCode('');
+      if (editCompany) {
+        await api.patch(`/companies/${editCompany.id}/`, payload);
+        setCompanySuccess('Company updated successfully.');
+      } else {
+        await api.post('/companies/', payload);
+        setCompanySuccess('Company registered successfully.');
+      }
       setShowModal(false);
       await fetchCompanies();
       setTimeout(() => setCompanySuccess(''), 3000);
@@ -80,18 +111,14 @@ export const OrgCompanies: React.FC = () => {
         });
         setFieldErrors(errors);
         if (errors.non_field_errors) setModalError(errors.non_field_errors);
+        else if (errors.detail) setModalError(errors.detail);
+        else setModalError('Please fix the errors below.');
       } else {
-        setModalError('Failed to register company.');
+        setModalError('Failed to save company. Please try again.');
       }
+    } finally {
+      setIsSubmitting(false);
     }
-  };
-
-  const openModal = () => {
-    setCompanyName('');
-    setCompanyCode('');
-    setModalError('');
-    setFieldErrors({});
-    setShowModal(true);
   };
 
   const filtered = companies.filter(c =>
@@ -99,15 +126,18 @@ export const OrgCompanies: React.FC = () => {
     c.code.toLowerCase().includes(search.toLowerCase())
   );
 
+  const getBranchNames = (slugs: string[]) =>
+    slugs
+      .map(slug => branches.find(b => b.slug === slug)?.name || slug)
+      .join(', ');
+
   return (
     <div className="space-y-5">
       {/* Page Header */}
       <div>
         <h1 className="text-2xl font-bold text-slate-900">Company Catalogs</h1>
         <p className="mt-1 text-sm text-slate-500">
-          {settings?.company_creation_policy === 'ORG_ADMIN'
-            ? 'Centralized mode — you manage all company registrations globally.'
-            : 'Decentralized mode — companies are created and isolated by individual branches.'}
+          Manage company registrations from HQ. Assign companies to branches to control visibility.
         </p>
       </div>
 
@@ -135,7 +165,7 @@ export const OrgCompanies: React.FC = () => {
         <div className="px-6 py-4 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>
             <h2 className="text-base font-semibold text-slate-900">All Companies</h2>
-            <p className="text-xs text-slate-400 mt-0.5">{companies.length} registered companies</p>
+            <p className="text-xs text-slate-400 mt-0.5">{companies.length} registered</p>
           </div>
           <div className="flex items-center gap-2">
             <div className="relative">
@@ -150,14 +180,12 @@ export const OrgCompanies: React.FC = () => {
                 className="pl-8 pr-3 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 w-48"
               />
             </div>
-            {settings?.company_creation_policy === 'ORG_ADMIN' && (
-              <Button onClick={openModal} size="sm">
-                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-                </svg>
-                Add Company
-              </Button>
-            )}
+            <Button onClick={openCreateModal} size="sm">
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+              </svg>
+              Add Company
+            </Button>
           </div>
         </div>
 
@@ -177,8 +205,8 @@ export const OrgCompanies: React.FC = () => {
             <p className="text-sm font-medium text-slate-700">
               {search ? 'No companies match your search.' : 'No companies registered yet.'}
             </p>
-            {!search && settings?.company_creation_policy === 'ORG_ADMIN' && (
-              <Button onClick={openModal} variant="outline" size="sm" className="mt-3">
+            {!search && (
+              <Button onClick={openCreateModal} variant="outline" size="sm" className="mt-3">
                 Register First Company
               </Button>
             )}
@@ -189,15 +217,15 @@ export const OrgCompanies: React.FC = () => {
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Company Name</th>
                 <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Code</th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Scope</th>
+                <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Assigned Branches</th>
                 <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Registered</th>
+                <th className="px-6 py-3" />
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {filtered.map((c) => {
-                const branchName = c.branch
-                  ? (branches.find(b => b.slug === c.branch)?.name || c.branch)
-                  : null;
+                const assignedNames = getBranchNames(c.branches || []);
+                const count = (c.branches || []).length;
                 return (
                   <tr key={c.id} className="hover:bg-slate-50 transition-colors">
                     <td className="px-6 py-4 font-medium text-slate-900">{c.name}</td>
@@ -205,12 +233,27 @@ export const OrgCompanies: React.FC = () => {
                       <code className="text-xs text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded font-mono">{c.code}</code>
                     </td>
                     <td className="px-6 py-4">
-                      <Badge color={branchName ? 'blue' : 'slate'}>
-                        {branchName || 'Global'}
-                      </Badge>
+                      {count === 0 ? (
+                        <span className="text-xs text-slate-400 italic">No branches assigned</span>
+                      ) : (
+                        <span
+                          className="text-xs text-slate-700"
+                          title={assignedNames}
+                        >
+                          {count === 1 ? assignedNames : `${count} branches`}
+                        </span>
+                      )}
                     </td>
                     <td className="px-6 py-4 text-slate-500">
                       {new Date(c.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      <button
+                        onClick={() => openEditModal(c)}
+                        className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+                      >
+                        Edit
+                      </button>
                     </td>
                   </tr>
                 );
@@ -220,8 +263,12 @@ export const OrgCompanies: React.FC = () => {
         )}
       </div>
 
-      {/* Create Company Modal */}
-      <Modal show={showModal} onClose={() => setShowModal(false)} title="Register New Company">
+      {/* Create / Edit Company Modal */}
+      <Modal
+        show={showModal}
+        onClose={() => setShowModal(false)}
+        title={editCompany ? 'Edit Company' : 'Register New Company'}
+      >
         {modalError && (
           <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-700 mb-4">
             <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -230,7 +277,7 @@ export const OrgCompanies: React.FC = () => {
             {modalError}
           </div>
         )}
-        <form onSubmit={handleCreate} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4">
           <Input
             label="Company Name"
             value={companyName}
@@ -246,11 +293,47 @@ export const OrgCompanies: React.FC = () => {
             placeholder="Leave blank to auto-generate"
             error={fieldErrors.code}
           />
+
+          {/* Branch Assignment Checkboxes */}
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-2">
+              Assign to Branches
+            </label>
+            {branches.length === 0 ? (
+              <p className="text-sm text-slate-400 italic">No branches exist yet. Create branches first.</p>
+            ) : (
+              <div className="border border-slate-200 rounded-lg divide-y divide-slate-100 max-h-48 overflow-y-auto">
+                {branches.map((branch) => (
+                  <label
+                    key={branch.slug}
+                    className="flex items-center gap-3 px-4 py-2.5 cursor-pointer hover:bg-slate-50 transition-colors"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedBranches.includes(branch.slug)}
+                      onChange={() => toggleBranch(branch.slug)}
+                      className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                    />
+                    <span className="text-sm text-slate-800">{branch.name}</span>
+                    <span className="ml-auto text-xs text-slate-400 font-mono">{branch.slug}</span>
+                  </label>
+                ))}
+              </div>
+            )}
+            {selectedBranches.length > 0 && (
+              <p className="mt-1.5 text-xs text-slate-500">
+                {selectedBranches.length} branch{selectedBranches.length !== 1 ? 'es' : ''} selected
+              </p>
+            )}
+          </div>
+
           <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 mt-2">
             <Button type="button" variant="surface" onClick={() => setShowModal(false)}>
               Cancel
             </Button>
-            <Button type="submit">Register Company</Button>
+            <Button type="submit" disabled={isSubmitting}>
+              {isSubmitting ? 'Saving...' : editCompany ? 'Save Changes' : 'Register Company'}
+            </Button>
           </div>
         </form>
       </Modal>

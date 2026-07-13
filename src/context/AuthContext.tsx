@@ -10,8 +10,6 @@ interface UserProfile {
   org_name: string | null;
   branch_slug: string | null;
   branch_name: string | null;
-  company_creation_policy?: 'ORG_ADMIN' | 'BRANCH_ADMIN' | null;
-  item_creation_policy?: 'ORG_ADMIN' | 'BRANCH_ADMIN' | null;
 }
 
 interface AuthContextType {

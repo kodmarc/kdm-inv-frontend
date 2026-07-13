@@ -13,7 +13,6 @@ import { OrgBranches } from './pages/Org/OrgBranches';
 import { OrgCompanies } from './pages/Org/OrgCompanies';
 import { OrgItems } from './pages/Org/OrgItems';
 import { OrgUsers } from './pages/Org/OrgUsers';
-import { OrgSettings } from './pages/Org/OrgSettings';
 import { OrgReports } from './pages/Org/OrgReports';
 
 // Branch Pages
@@ -77,7 +76,6 @@ function App() {
               <Route path="/org-admin/companies" element={<OrgCompanies />} />
               <Route path="/org-admin/items" element={<OrgItems />} />
               <Route path="/org-admin/users" element={<OrgUsers />} />
-              <Route path="/org-admin/settings" element={<OrgSettings />} />
               <Route path="/org-admin/reports" element={<OrgReports />} />
             </Route>
           </Route>

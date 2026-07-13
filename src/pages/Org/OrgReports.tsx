@@ -18,17 +18,9 @@ interface UserItem {
   is_active: boolean;
 }
 
-interface OrgSettings {
-  name: string;
-  org_id: string;
-  company_creation_policy: 'ORG_ADMIN' | 'BRANCH_ADMIN';
-  item_creation_policy: 'ORG_ADMIN' | 'BRANCH_ADMIN';
-}
-
 interface OrgReportsContext {
   branches: BranchItem[];
   users: UserItem[];
-  settings: OrgSettings | null;
 }
 
 const roleLabels: Record<string, string> = {
@@ -48,7 +40,7 @@ const roleColors: Record<string, 'purple' | 'blue' | 'green' | 'amber' | 'slate'
 };
 
 export const OrgReports: React.FC = () => {
-  const { branches, users, settings } = useOutletContext<OrgReportsContext>();
+  const { branches, users } = useOutletContext<OrgReportsContext>();
 
   const getBranchUsers = (slug: string) => users.filter(u => u.branch === slug);
 
@@ -116,24 +108,18 @@ export const OrgReports: React.FC = () => {
           </div>
         </div>
 
-        {/* Active Scopes Overview Card */}
+        {/* Org Overview Card */}
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
           <div className="px-6 py-4 border-b border-slate-200">
-            <h2 className="text-base font-semibold text-slate-900">Governance Overview</h2>
-            <p className="text-xs text-slate-400 mt-0.5">Current policy configuration and org-level stats</p>
+            <h2 className="text-base font-semibold text-slate-900">Organization Overview</h2>
+            <p className="text-xs text-slate-400 mt-0.5">High-level org-wide statistics</p>
           </div>
           <div className="p-5 space-y-3">
             {[
               { label: 'Total Branches', value: branches.length.toString() },
               { label: 'Total User Accounts', value: users.length.toString() },
-              {
-                label: 'Company Register Scope',
-                value: settings?.company_creation_policy === 'ORG_ADMIN' ? 'Centralized (HQ)' : 'Decentralized (Branch)',
-              },
-              {
-                label: 'Item Register Scope',
-                value: settings?.item_creation_policy === 'ORG_ADMIN' ? 'Centralized (HQ)' : 'Decentralized (Branch)',
-              },
+              { label: 'Company Management', value: 'Centralized (HQ)' },
+              { label: 'Item Management', value: 'Centralized (HQ)' },
             ].map(({ label, value }) => (
               <div key={label} className="flex items-center justify-between py-2.5 border-b border-slate-100 last:border-0">
                 <span className="text-sm text-slate-500">{label}</span>
