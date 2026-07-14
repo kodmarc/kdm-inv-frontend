@@ -250,12 +250,25 @@ export const CompanyHomeLayout: React.FC = () => {
   const fetchCategories = async () => {
     try { const r = await api.get('/item-categories/'); setCategories(r.data); } catch { /* silent */ }
   };
-  const fetchItems = async () => {
-    setIsLoading(true);
-    try { const r = await api.get(`/items/?company_code=${companySlug}`); setItems(r.data); }
-    catch { setError('Failed to fetch items catalogue.'); }
-    finally { setIsLoading(false); }
-  };
+// In the CompanyHomeLayout component, update the fetchItems function:
+const fetchItems = async (sortBy?: string, sortOrder?: string) => {
+  setIsLoading(true);
+  try {
+    let url = `/items/?company_code=${companySlug}`;
+    if (sortBy) {
+      url += `&sort_by=${sortBy}`;
+    }
+    if (sortOrder) {
+      url += `&sort_order=${sortOrder}`;
+    }
+    const r = await api.get(url);
+    setItems(r.data);
+  } catch {
+    setError('Failed to fetch items catalogue.');
+  } finally {
+    setIsLoading(false);
+  }
+};
   const fetchOrderBookers = async () => {
     try { const r = await api.get('/order-bookers/'); setOrderBookers(r.data); } catch { /* silent */ }
   };
