@@ -196,6 +196,7 @@ export interface CompanyHomeLayoutContextType {
   fetchSalesInvoices: () => Promise<void>;
   fetchPurchaseInvoices: () => Promise<void>;
   activeCompany: CompanyItem | undefined;
+  
 }
 
 const roleLabels: Record<string, string> = {

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useOutletContext, useParams } from 'react-router-dom';
 import type { CompanyHomeLayoutContextType } from '../CompanyHomeLayout';
 import { useAuth } from '../../../../context/AuthContext';
@@ -8,10 +8,19 @@ import api from '../../../../services/api';
 const inputCls = 'w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition-colors placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20';
 const labelCls = 'block text-xs font-semibold text-slate-700 mb-1.5';
 
+type SortOption = {
+  label: string;
+  value: string;
+  sortBy: string;
+  order: 'asc' | 'desc';
+};
+
 export const AccountsOpening: React.FC = () => {
   const { user } = useAuth();
   const { branchSlug } = useParams<{ branchSlug: string }>();
   const { accounts, fetchAccounts, setSuccess } = useOutletContext<CompanyHomeLayoutContextType>();
+
+  const [localAccounts, setLocalAccounts] = useState<any[]>([]);
 
   const [showAccountModal, setShowAccountModal] = useState(false);
   const [editingRecord, setEditingRecord] = useState<any>(null);
@@ -27,6 +36,61 @@ export const AccountsOpening: React.FC = () => {
   const [editError, setEditError] = useState('');
   const [editFieldErrors, setEditFieldErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Sorting states
+  const [sortBy, setSortBy] = useState<string>('name');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+
+  const sortOptions: SortOption[] = [
+    { label: 'Account Name (A-Z)', value: 'name_asc', sortBy: 'name', order: 'asc' },
+    { label: 'Account Name (Z-A)', value: 'name_desc', sortBy: 'name', order: 'desc' },
+    { label: 'Balance (Low-High)', value: 'balance_asc', sortBy: 'balance', order: 'asc' },
+    { label: 'Balance (High-Low)', value: 'balance_desc', sortBy: 'balance', order: 'desc' },
+    { label: 'Opening Balance (Low-High)', value: 'opening_balance_asc', sortBy: 'opening_balance', order: 'asc' },
+    { label: 'Opening Balance (High-Low)', value: 'opening_balance_desc', sortBy: 'opening_balance', order: 'desc' },
+  ];
+
+  const getCurrentSortValue = () => {
+    const found = sortOptions.find(opt => opt.sortBy === sortBy && opt.order === sortOrder);
+    return found ? found.value : 'name_asc';
+  };
+
+  const sortAccounts = useCallback((data: any[]) => {
+    const sorted = [...data];
+    if (sortBy === 'name') {
+      sorted.sort((a, b) => {
+        const compare = a.name.localeCompare(b.name);
+        return sortOrder === 'asc' ? compare : -compare;
+      });
+    } else if (sortBy === 'balance') {
+      sorted.sort((a, b) => {
+        const aVal = parseFloat(a.balance || '0');
+        const bVal = parseFloat(b.balance || '0');
+        const compare = aVal - bVal;
+        return sortOrder === 'asc' ? compare : -compare;
+      });
+    } else if (sortBy === 'opening_balance') {
+      sorted.sort((a, b) => {
+        const aVal = parseFloat(a.opening_balance || '0');
+        const bVal = parseFloat(b.opening_balance || '0');
+        const compare = aVal - bVal;
+        return sortOrder === 'asc' ? compare : -compare;
+      });
+    }
+    return sorted;
+  }, [sortBy, sortOrder]);
+
+  useEffect(() => {
+    setLocalAccounts(sortAccounts(accounts));
+  }, [accounts, sortAccounts]);
+
+  const handleSortChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const selected = sortOptions.find(opt => opt.value === e.target.value);
+    if (selected) {
+      setSortBy(selected.sortBy);
+      setSortOrder(selected.order);
+    }
+  };
 
   const handleCreateAccount = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -90,21 +154,34 @@ export const AccountsOpening: React.FC = () => {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Chart of Accounts / Ledger</h1>
           <p className="mt-0.5 text-sm text-slate-500">Manage organization and branch ledger accounts.</p>
         </div>
-        {canCreate && (
-          <button onClick={openAddModal} className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-700">
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
-            Add Account
-          </button>
-        )}
+        <div className="flex items-center gap-3">
+          <div className="min-w-[180px]">
+            <select
+              value={getCurrentSortValue()}
+              onChange={handleSortChange}
+              className="w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-sm text-slate-900 outline-none transition-colors focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+            >
+              {sortOptions.map(opt => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+          </div>
+          {canCreate && (
+            <button onClick={openAddModal} className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-700">
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
+              Add Account
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        {accounts.length === 0 ? (
+        {localAccounts.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-slate-100">
               <svg className="h-6 w-6 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg>
@@ -119,7 +196,7 @@ export const AccountsOpening: React.FC = () => {
                 <tr>{['Code', 'Account Name', 'Opening Balance', 'Current Balance', 'Scope', 'Status', 'Actions'].map(h => <th key={h} className="whitespace-nowrap px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">{h}</th>)}</tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {accounts.map(item => (
+                {localAccounts.map(item => (
                   <tr key={item.id} className="transition-colors hover:bg-slate-50">
                     <td className="px-6 py-4"><code className="rounded bg-slate-100 px-1.5 py-0.5 text-[11px] font-mono text-slate-600">{item.code}</code></td>
                     <td className="px-6 py-4 font-medium text-slate-900">{item.name}</td>
@@ -194,4 +271,4 @@ export const AccountsOpening: React.FC = () => {
       )}
     </div>
   );
-};
+};  

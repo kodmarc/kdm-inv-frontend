@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useOutletContext, useNavigate, useParams } from 'react-router-dom';
 import type { CompanyHomeLayoutContextType } from '../CompanyHomeLayout';
 import api from '../../../../services/api';
@@ -45,6 +45,13 @@ interface DamageReceivingItem {
   updated_at: string;
 }
 
+type SortOption = {
+  label: string;
+  value: string;
+  sortBy: string;
+  order: 'asc' | 'desc';
+};
+
 export const DamageReceivingList: React.FC = () => {
   const navigate = useNavigate();
   const { branchSlug, companySlug } = useParams<{ branchSlug: string; companySlug: string }>();
@@ -59,6 +66,62 @@ export const DamageReceivingList: React.FC = () => {
   const [isListLoading, setIsListLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'paid'>('all');
+  
+  // Sorting states
+  const [sortBy, setSortBy] = useState<string>('created_at');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [localReceivings, setLocalReceivings] = useState<DamageReceivingItem[]>([]);
+
+  const sortOptions: SortOption[] = [
+    { label: 'Newest First', value: 'created_at_desc', sortBy: 'created_at', order: 'desc' },
+    { label: 'Oldest First', value: 'created_at_asc', sortBy: 'created_at', order: 'asc' },
+    { label: 'Date (Latest)', value: 'date_desc', sortBy: 'date', order: 'desc' },
+    { label: 'Date (Earliest)', value: 'date_asc', sortBy: 'date', order: 'asc' },
+    { label: 'Net Amount (High-Low)', value: 'net_amount_desc', sortBy: 'net_amount', order: 'desc' },
+    { label: 'Net Amount (Low-High)', value: 'net_amount_asc', sortBy: 'net_amount', order: 'asc' },
+    { label: 'Customer (A-Z)', value: 'party_name_asc', sortBy: 'party_name', order: 'asc' },
+    { label: 'Customer (Z-A)', value: 'party_name_desc', sortBy: 'party_name', order: 'desc' },
+    { label: 'Salesman (A-Z)', value: 'salesman_name_asc', sortBy: 'salesman_name', order: 'asc' },
+    { label: 'Salesman (Z-A)', value: 'salesman_name_desc', sortBy: 'salesman_name', order: 'desc' },
+  ];
+
+  const getCurrentSortValue = () => {
+    const found = sortOptions.find(opt => opt.sortBy === sortBy && opt.order === sortOrder);
+    return found ? found.value : 'created_at_desc';
+  };
+
+  const sortReceivings = useCallback((data: DamageReceivingItem[]) => {
+    const sorted = [...data];
+    if (sortBy === 'created_at') {
+      sorted.sort((a, b) => {
+        const compare = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+        return sortOrder === 'asc' ? compare : -compare;
+      });
+    } else if (sortBy === 'date') {
+      sorted.sort((a, b) => {
+        const compare = new Date(a.date).getTime() - new Date(b.date).getTime();
+        return sortOrder === 'asc' ? compare : -compare;
+      });
+    } else if (sortBy === 'net_amount') {
+      sorted.sort((a, b) => {
+        const aVal = parseFloat(a.net_amount || '0');
+        const bVal = parseFloat(b.net_amount || '0');
+        const compare = aVal - bVal;
+        return sortOrder === 'asc' ? compare : -compare;
+      });
+    } else if (sortBy === 'party_name') {
+      sorted.sort((a, b) => {
+        const compare = (a.party_name || '').localeCompare(b.party_name || '');
+        return sortOrder === 'asc' ? compare : -compare;
+      });
+    } else if (sortBy === 'salesman_name') {
+      sorted.sort((a, b) => {
+        const compare = (a.salesman_name || '').localeCompare(b.salesman_name || '');
+        return sortOrder === 'asc' ? compare : -compare;
+      });
+    }
+    return sorted;
+  }, [sortBy, sortOrder]);
 
   const fetchReceivings = async () => {
     setIsListLoading(true);
@@ -75,6 +138,18 @@ export const DamageReceivingList: React.FC = () => {
   useEffect(() => {
     fetchReceivings();
   }, [companySlug]);
+
+  useEffect(() => {
+    setLocalReceivings(sortReceivings(receivings));
+  }, [receivings, sortReceivings]);
+
+  const handleSortChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const selected = sortOptions.find(opt => opt.value === e.target.value);
+    if (selected) {
+      setSortBy(selected.sortBy);
+      setSortOrder(selected.order);
+    }
+  };
 
   const handleToggleStatus = async (id: string, currentStatus: string) => {
     const nextStatus = currentStatus === 'pending' ? 'paid' : 'pending';
@@ -94,12 +169,12 @@ export const DamageReceivingList: React.FC = () => {
     window.open(url, '_blank');
   };
 
-  const companyReceivings = receivings.filter(ret => ret.company === activeCompany?.id);
+  const companyReceivings = localReceivings.filter(ret => ret.company === activeCompany?.id);
 
   const filteredReceivings = companyReceivings.filter(ret => {
     const matchesSearch = 
-      ret.damage_receiving_code.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      ret.party_name.toLowerCase().includes(searchQuery.toLowerCase());
+      ret.damage_receiving_code?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      ret.party_name?.toLowerCase().includes(searchQuery.toLowerCase());
     
     const matchesStatus = 
       statusFilter === 'all' || ret.status === statusFilter;
@@ -116,7 +191,18 @@ export const DamageReceivingList: React.FC = () => {
             Manage broken or faulted product returns received from customers, and record cash/outstanding ledger adjustments.
           </p>
         </div>
-        <div>
+        <div className="flex items-center gap-3">
+          <div className="min-w-[180px]">
+            <select
+              value={getCurrentSortValue()}
+              onChange={handleSortChange}
+              className="w-full rounded-lg border border-zinc-200 bg-white px-3.5 py-2 text-xs text-slate-900 outline-none transition-colors focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+            >
+              {sortOptions.map(opt => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+          </div>
           <button
             onClick={() => navigate(`/branch/${branchSlug}/company/${companySlug}/damage-receiving/new`)}
             className="cursor-pointer bg-primary hover:bg-primary-hover text-white text-xs font-semibold px-4 py-2.5 rounded-xl transition-all shadow-xs flex items-center gap-1.5 font-bold"
