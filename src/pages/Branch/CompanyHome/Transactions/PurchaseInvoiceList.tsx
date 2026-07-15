@@ -1,7 +1,14 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useOutletContext, useNavigate, useParams } from 'react-router-dom';
 import type { CompanyHomeLayoutContextType } from '../CompanyHomeLayout';
 import api from '../../../../services/api';
+
+type SortOption = {
+  label: string;
+  value: string;
+  sortBy: string;
+  order: 'asc' | 'desc';
+};
 
 export const PurchaseInvoiceList: React.FC = () => {
   const navigate = useNavigate();
@@ -18,10 +25,71 @@ export const PurchaseInvoiceList: React.FC = () => {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'paid'>('all');
+  
+  // Sorting states
+  const [sortBy, setSortBy] = useState<string>('created_at');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [localInvoices, setLocalInvoices] = useState<any[]>([]);
+
+  const sortOptions: SortOption[] = [
+    { label: 'Newest First', value: 'created_at_desc', sortBy: 'created_at', order: 'desc' },
+    { label: 'Oldest First', value: 'created_at_asc', sortBy: 'created_at', order: 'asc' },
+    { label: 'Date (Latest)', value: 'date_desc', sortBy: 'date', order: 'desc' },
+    { label: 'Date (Earliest)', value: 'date_asc', sortBy: 'date', order: 'asc' },
+    { label: 'Net Amount (High-Low)', value: 'net_amount_desc', sortBy: 'net_amount', order: 'desc' },
+    { label: 'Net Amount (Low-High)', value: 'net_amount_asc', sortBy: 'net_amount', order: 'asc' },
+    { label: 'Supplier (A-Z)', value: 'supplier_name_asc', sortBy: 'supplier_name', order: 'asc' },
+    { label: 'Supplier (Z-A)', value: 'supplier_name_desc', sortBy: 'supplier_name', order: 'desc' },
+  ];
+
+  const getCurrentSortValue = () => {
+    const found = sortOptions.find(opt => opt.sortBy === sortBy && opt.order === sortOrder);
+    return found ? found.value : 'created_at_desc';
+  };
+
+  const sortInvoices = useCallback((data: any[]) => {
+    const sorted = [...data];
+    if (sortBy === 'created_at') {
+      sorted.sort((a, b) => {
+        const compare = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+        return sortOrder === 'asc' ? compare : -compare;
+      });
+    } else if (sortBy === 'date') {
+      sorted.sort((a, b) => {
+        const compare = new Date(a.date).getTime() - new Date(b.date).getTime();
+        return sortOrder === 'asc' ? compare : -compare;
+      });
+    } else if (sortBy === 'net_amount') {
+      sorted.sort((a, b) => {
+        const aVal = parseFloat(a.net_amount || '0');
+        const bVal = parseFloat(b.net_amount || '0');
+        const compare = aVal - bVal;
+        return sortOrder === 'asc' ? compare : -compare;
+      });
+    } else if (sortBy === 'supplier_name') {
+      sorted.sort((a, b) => {
+        const compare = (a.supplier_name || '').localeCompare(b.supplier_name || '');
+        return sortOrder === 'asc' ? compare : -compare;
+      });
+    }
+    return sorted;
+  }, [sortBy, sortOrder]);
 
   useEffect(() => {
     fetchPurchaseInvoices();
   }, [companySlug]);
+
+  useEffect(() => {
+    setLocalInvoices(sortInvoices(purchaseInvoices));
+  }, [purchaseInvoices, sortInvoices]);
+
+  const handleSortChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const selected = sortOptions.find(opt => opt.value === e.target.value);
+    if (selected) {
+      setSortBy(selected.sortBy);
+      setSortOrder(selected.order);
+    }
+  };
 
   const handleDownloadPDF = (id: string, _code?: string) => {
     const url = `${api.defaults.baseURL}/purchase-invoices/${id}/download-pdf/`;
@@ -42,13 +110,13 @@ export const PurchaseInvoiceList: React.FC = () => {
   };
 
   // Filter invoices for the active company
-  const companyInvoices = purchaseInvoices.filter(inv => inv.company === activeCompany?.id);
+  const companyInvoices = localInvoices.filter(inv => inv.company === activeCompany?.id);
 
   // Apply search & status filter
   const filteredInvoices = companyInvoices.filter(inv => {
     const matchesSearch = 
-      inv.purchase_code.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      inv.supplier_name.toLowerCase().includes(searchQuery.toLowerCase());
+      inv.purchase_code?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      inv.supplier_name?.toLowerCase().includes(searchQuery.toLowerCase());
     
     const matchesStatus = 
       statusFilter === 'all' || inv.status === statusFilter;
@@ -66,7 +134,18 @@ export const PurchaseInvoiceList: React.FC = () => {
             Manage purchases, stock additions, vendor accounts, and ledger liabilities.
           </p>
         </div>
-        <div>
+        <div className="flex items-center gap-3">
+          <div className="min-w-[180px]">
+            <select
+              value={getCurrentSortValue()}
+              onChange={handleSortChange}
+              className="w-full rounded-lg border border-zinc-200 bg-white px-3.5 py-2 text-xs text-slate-900 outline-none transition-colors focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+            >
+              {sortOptions.map(opt => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+          </div>
           <button
             onClick={() => navigate(`/branch/${branchSlug}/company/${companySlug}/purchase-invoice/new`)}
             className="cursor-pointer bg-primary hover:bg-primary-hover text-white text-xs font-semibold px-4 py-2.5 rounded-xl transition-all shadow-xs flex items-center gap-1.5"
@@ -78,7 +157,6 @@ export const PurchaseInvoiceList: React.FC = () => {
 
       {/* Filters Bar */}
       <div className="flex flex-col sm:flex-row gap-3 justify-between items-center mb-6">
-        {/* Search */}
         <div className="relative w-full sm:max-w-xs">
           <input
             type="text"
@@ -89,7 +167,6 @@ export const PurchaseInvoiceList: React.FC = () => {
           />
         </div>
 
-        {/* Tab Filters */}
         <div className="flex bg-zinc-100 p-0.5 rounded-xl border border-zinc-200/50">
           {(['all', 'pending', 'paid'] as const).map((filter) => (
             <button

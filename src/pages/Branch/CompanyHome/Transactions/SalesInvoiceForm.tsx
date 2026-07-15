@@ -55,7 +55,7 @@ const parseFlexibleDate = (str: string): string => {
   return trimmed;
 };
 
-export const SalesInvoiceForm: React.FC = () => {
+const SalesInvoiceForm: React.FC = () => {
   const { id } = useParams<{ id?: string }>();
   const { branchSlug, companySlug } = useParams<{ branchSlug: string; companySlug: string }>();
   const navigate = useNavigate();
@@ -650,7 +650,7 @@ export const SalesInvoiceForm: React.FC = () => {
           </div>
         </div>
 
-        {/* Step 2: Line Items Grid */}
+        {/* Line Items Grid */}
         <div className="pt-4">
           <table className="min-w-full border-collapse border border-zinc-200 text-left">
             <thead>
@@ -802,7 +802,7 @@ export const SalesInvoiceForm: React.FC = () => {
           </div>
         </div>
 
-        {/* Step 3: Summaries */}
+        {/* Summaries */}
         <div className="flex justify-end items-start pt-4">
           <div className="border border-zinc-200 rounded-2xl p-5 w-full max-w-md space-y-3.5 text-xs text-zinc-700 font-semibold">
             <div className="flex justify-between items-center pb-2 border-b border-zinc-100">
@@ -873,3 +873,7 @@ export const SalesInvoiceForm: React.FC = () => {
     </div>
   );
 };
+
+// ✅ IMPORTANT: Both exports are needed
+export { SalesInvoiceForm };
+export default SalesInvoiceForm;

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useOutletContext, useParams } from 'react-router-dom';
 import type { CompanyHomeLayoutContextType } from '../CompanyHomeLayout';
 import { useAuth } from '../../../../context/AuthContext';
@@ -8,11 +8,20 @@ import api from '../../../../services/api';
 const inputCls = 'w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition-colors placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20';
 const labelCls = 'block text-xs font-semibold text-slate-700 mb-1.5';
 
+type SortOption = {
+  label: string;
+  value: string;
+  sortBy: string;
+  order: 'asc' | 'desc';
+};
+
 export const Salesmen: React.FC = () => {
   const { user } = useAuth();
   const { branchSlug } = useParams<{ branchSlug: string }>();
   const { salesmen, fetchSalesmen, setSuccess } = useOutletContext<CompanyHomeLayoutContextType>();
 
+  const [localSalesmen, setLocalSalesmen] = useState<any[]>([]);
+  
   const [showRegisterModal, setShowRegisterModal] = useState(false);
   const [editingRecord, setEditingRecord] = useState<any>(null);
   const [regName, setRegName] = useState('');
@@ -28,6 +37,52 @@ export const Salesmen: React.FC = () => {
   const [editError, setEditError] = useState('');
   const [editFieldErrors, setEditFieldErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Sorting states
+  const [sortBy, setSortBy] = useState<string>('name');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+
+  const sortOptions: SortOption[] = [
+    { label: 'Name (A-Z)', value: 'name_asc', sortBy: 'name', order: 'asc' },
+    { label: 'Name (Z-A)', value: 'name_desc', sortBy: 'name', order: 'desc' },
+    { label: 'Scope (Branch First)', value: 'scope_asc', sortBy: 'scope', order: 'asc' },
+    { label: 'Scope (Global First)', value: 'scope_desc', sortBy: 'scope', order: 'desc' },
+  ];
+
+  const getCurrentSortValue = () => {
+    const found = sortOptions.find(opt => opt.sortBy === sortBy && opt.order === sortOrder);
+    return found ? found.value : 'name_asc';
+  };
+
+  const sortSalesmen = useCallback((data: any[]) => {
+    const sorted = [...data];
+    if (sortBy === 'name') {
+      sorted.sort((a, b) => {
+        const compare = a.name.localeCompare(b.name);
+        return sortOrder === 'asc' ? compare : -compare;
+      });
+    } else if (sortBy === 'scope') {
+      sorted.sort((a, b) => {
+        const aScope = a.branch ? 1 : 0;
+        const bScope = b.branch ? 1 : 0;
+        const compare = aScope - bScope;
+        return sortOrder === 'asc' ? compare : -compare;
+      });
+    }
+    return sorted;
+  }, [sortBy, sortOrder]);
+
+  useEffect(() => {
+    setLocalSalesmen(sortSalesmen(salesmen));
+  }, [salesmen, sortSalesmen]);
+
+  const handleSortChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const selected = sortOptions.find(opt => opt.value === e.target.value);
+    if (selected) {
+      setSortBy(selected.sortBy);
+      setSortOrder(selected.order);
+    }
+  };
 
   const handleCreateRegister = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -106,21 +161,34 @@ export const Salesmen: React.FC = () => {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Salesmen Registry</h1>
           <p className="mt-0.5 text-sm text-slate-500">Manage individuals handling sales distribution.</p>
         </div>
-        {canCreate && (
-          <button onClick={openAddModal} className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-700">
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
-            Add Salesman
-          </button>
-        )}
+        <div className="flex items-center gap-3">
+          <div className="min-w-[180px]">
+            <select
+              value={getCurrentSortValue()}
+              onChange={handleSortChange}
+              className="w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-sm text-slate-900 outline-none transition-colors focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+            >
+              {sortOptions.map(opt => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+          </div>
+          {canCreate && (
+            <button onClick={openAddModal} className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-700">
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
+              Add Salesman
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        {salesmen.length === 0 ? (
+        {localSalesmen.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <p className="text-sm font-semibold text-slate-700">No salesmen registered</p>
             <p className="mt-1 text-xs text-slate-400">Click "Add Salesman" to register the first one.</p>
@@ -132,7 +200,7 @@ export const Salesmen: React.FC = () => {
                 <tr>{['Name', 'Contact No', 'Email', 'Scope', 'Status', 'Actions'].map(h => <th key={h} className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">{h}</th>)}</tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {salesmen.map(item => (
+                {localSalesmen.map(item => (
                   <tr key={item.id} className="transition-colors hover:bg-slate-50">
                     <td className="px-6 py-4 font-medium text-slate-900">{item.name}</td>
                     <td className="px-6 py-4 text-slate-600">{item.contact_no}</td>
@@ -148,6 +216,7 @@ export const Salesmen: React.FC = () => {
         )}
       </div>
 
+      {/* Modals remain the same */}
       {showRegisterModal && (
         <ModalShell title="Register New Salesman" subtitle="Add a salesman to this branch" onClose={() => setShowRegisterModal(false)} onSubmit={handleCreateRegister} error={regError} fieldErrors={regFieldErrors}>
           {(fe: any) => (<>

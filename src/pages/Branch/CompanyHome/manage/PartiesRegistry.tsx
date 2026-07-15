@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useOutletContext, useParams } from 'react-router-dom';
 import type { CompanyHomeLayoutContextType } from '../CompanyHomeLayout';
 import { useAuth } from '../../../../context/AuthContext';
@@ -8,10 +8,19 @@ import api from '../../../../services/api';
 const inputCls = 'w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition-colors placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20';
 const labelCls = 'block text-xs font-semibold text-slate-700 mb-1.5';
 
+type SortOption = {
+  label: string;
+  value: string;
+  sortBy: string;
+  order: 'asc' | 'desc';
+};
+
 export const PartiesRegistry: React.FC = () => {
   const { user } = useAuth();
   const { branchSlug } = useParams<{ branchSlug: string }>();
   const { parties, fetchParties, setSuccess } = useOutletContext<CompanyHomeLayoutContextType>();
+
+  const [localParties, setLocalParties] = useState<any[]>([]);
 
   const [showRegisterModal, setShowRegisterModal] = useState(false);
   const [editingRecord, setEditingRecord] = useState<any>(null);
@@ -38,6 +47,68 @@ export const PartiesRegistry: React.FC = () => {
   const [editError, setEditError] = useState('');
   const [editFieldErrors, setEditFieldErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Sorting states
+  const [sortBy, setSortBy] = useState<string>('name');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+
+  const sortOptions: SortOption[] = [
+    { label: 'Name (A-Z)', value: 'name_asc', sortBy: 'name', order: 'asc' },
+    { label: 'Name (Z-A)', value: 'name_desc', sortBy: 'name', order: 'desc' },
+    { label: 'Role (Supplier First)', value: 'role_supplier_asc', sortBy: 'role_supplier', order: 'asc' },
+    { label: 'Role (Party First)', value: 'role_party_asc', sortBy: 'role_party', order: 'asc' },
+    { label: 'Scope (Branch First)', value: 'scope_asc', sortBy: 'scope', order: 'asc' },
+    { label: 'Scope (Global First)', value: 'scope_desc', sortBy: 'scope', order: 'desc' },
+  ];
+
+  const getCurrentSortValue = () => {
+    const found = sortOptions.find(opt => opt.sortBy === sortBy && opt.order === sortOrder);
+    return found ? found.value : 'name_asc';
+  };
+
+  const sortParties = useCallback((data: any[]) => {
+    const sorted = [...data];
+    if (sortBy === 'name') {
+      sorted.sort((a, b) => {
+        const compare = a.name.localeCompare(b.name);
+        return sortOrder === 'asc' ? compare : -compare;
+      });
+    } else if (sortBy === 'role_supplier') {
+      sorted.sort((a, b) => {
+        const aVal = a.is_supplier ? 1 : 0;
+        const bVal = b.is_supplier ? 1 : 0;
+        const compare = aVal - bVal;
+        return sortOrder === 'asc' ? compare : -compare;
+      });
+    } else if (sortBy === 'role_party') {
+      sorted.sort((a, b) => {
+        const aVal = a.is_party ? 1 : 0;
+        const bVal = b.is_party ? 1 : 0;
+        const compare = aVal - bVal;
+        return sortOrder === 'asc' ? compare : -compare;
+      });
+    } else if (sortBy === 'scope') {
+      sorted.sort((a, b) => {
+        const aScope = a.branch ? 1 : 0;
+        const bScope = b.branch ? 1 : 0;
+        const compare = aScope - bScope;
+        return sortOrder === 'asc' ? compare : -compare;
+      });
+    }
+    return sorted;
+  }, [sortBy, sortOrder]);
+
+  useEffect(() => {
+    setLocalParties(sortParties(parties));
+  }, [parties, sortParties]);
+
+  const handleSortChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const selected = sortOptions.find(opt => opt.value === e.target.value);
+    if (selected) {
+      setSortBy(selected.sortBy);
+      setSortOrder(selected.order);
+    }
+  };
 
   const handleCreateRegister = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -121,21 +192,34 @@ export const PartiesRegistry: React.FC = () => {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Suppliers & Parties Registry</h1>
           <p className="mt-0.5 text-sm text-slate-500">Manage vendors, retailers, shops, and partners for purchase and sales operations.</p>
         </div>
-        {canCreate && (
-          <button onClick={openAddModal} className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-700">
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
-            Add Supplier / Party
-          </button>
-        )}
+        <div className="flex items-center gap-3">
+          <div className="min-w-[180px]">
+            <select
+              value={getCurrentSortValue()}
+              onChange={handleSortChange}
+              className="w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-sm text-slate-900 outline-none transition-colors focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+            >
+              {sortOptions.map(opt => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+          </div>
+          {canCreate && (
+            <button onClick={openAddModal} className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-700">
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
+              Add Supplier / Party
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        {parties.length === 0 ? (
+        {localParties.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-slate-100">
               <svg className="h-6 w-6 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
@@ -150,7 +234,7 @@ export const PartiesRegistry: React.FC = () => {
                 <tr>{['Name', 'Contact', 'Roles', 'NTN / GST', 'Credit Limit', 'Balance', 'Scope', 'Status', 'Actions'].map(h => <th key={h} className="whitespace-nowrap px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">{h}</th>)}</tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {parties.map(item => (
+                {localParties.map(item => (
                   <tr key={item.id} className="transition-colors hover:bg-slate-50">
                     <td className="px-5 py-4 font-medium text-slate-900">{item.name}</td>
                     <td className="px-5 py-4 text-slate-600">{item.contact_no}</td>
@@ -178,7 +262,7 @@ export const PartiesRegistry: React.FC = () => {
         )}
       </div>
 
-      {/* Add Modal */}
+      {/* Modals remain the same */}
       {showRegisterModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 backdrop-blur-sm">
           <div className="flex w-full max-w-lg flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl" style={{ maxHeight: '90vh' }}>
@@ -222,7 +306,6 @@ export const PartiesRegistry: React.FC = () => {
         </div>
       )}
 
-      {/* Edit Modal */}
       {editingRecord && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 backdrop-blur-sm">
           <div className="flex w-full max-w-lg flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl" style={{ maxHeight: '90vh' }}>
