@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import api from '../../services/api';
 import { Button, Input, Modal } from '../../components/ui';
@@ -28,6 +28,12 @@ interface OrgCompaniesContext {
   setCompanyError: (msg: string) => void;
 }
 
+type SortOption = {
+  label: string;
+  value: string;
+  order: 'asc' | 'desc';
+};
+
 export const OrgCompanies: React.FC = () => {
   const {
     companies,
@@ -47,7 +53,23 @@ export const OrgCompanies: React.FC = () => {
   const [modalError, setModalError] = useState('');
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  // Filter state
   const [search, setSearch] = useState('');
+  const [branchFilter, setBranchFilter] = useState<string>('');
+  const [sortBy, setSortBy] = useState<string>('name');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+  const [dateRange, setDateRange] = useState<'all' | 'week' | 'month' | 'year'>('all');
+
+  // Sort options
+  const sortOptions: SortOption[] = [
+    { label: 'Name (A-Z)', value: 'name', order: 'asc' },
+    { label: 'Name (Z-A)', value: 'name', order: 'desc' },
+    { label: 'Date Registered (Newest)', value: 'created_at', order: 'desc' },
+    { label: 'Date Registered (Oldest)', value: 'created_at', order: 'asc' },
+    { label: 'Branch Count (Low-High)', value: 'branch_count', order: 'asc' },
+    { label: 'Branch Count (High-Low)', value: 'branch_count', order: 'desc' },
+  ];
 
   const openCreateModal = () => {
     setEditCompany(null);
@@ -120,15 +142,67 @@ export const OrgCompanies: React.FC = () => {
     }
   };
 
-  const filtered = companies.filter(c =>
-    c.name.toLowerCase().includes(search.toLowerCase()) ||
-    c.code.toLowerCase().includes(search.toLowerCase())
-  );
+  // Filter companies using useMemo
+  const filteredCompanies = useMemo(() => {
+    let result = [...companies];
+    
+    // Search filter
+    if (search.trim()) {
+      const term = search.toLowerCase().trim();
+      result = result.filter(c =>
+        c.name.toLowerCase().includes(term) ||
+        c.code.toLowerCase().includes(term)
+      );
+    }
+    
+    // Branch filter
+    if (branchFilter) {
+      result = result.filter(c => c.branches && c.branches.includes(branchFilter));
+    }
+
+    // Date range filter
+    if (dateRange !== 'all') {
+      const now = new Date();
+      let cutoffDate = new Date();
+      if (dateRange === 'week') {
+        cutoffDate.setDate(now.getDate() - 7);
+      } else if (dateRange === 'month') {
+        cutoffDate.setMonth(now.getMonth() - 1);
+      } else if (dateRange === 'year') {
+        cutoffDate.setFullYear(now.getFullYear() - 1);
+      }
+      result = result.filter(c => new Date(c.created_at) >= cutoffDate);
+    }
+    
+    // Sort
+    if (sortBy === 'name') {
+      result.sort((a, b) => {
+        const compare = a.name.localeCompare(b.name);
+        return sortOrder === 'asc' ? compare : -compare;
+      });
+    } else if (sortBy === 'created_at') {
+      result.sort((a, b) => {
+        const compare = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+        return sortOrder === 'asc' ? compare : -compare;
+      });
+    } else if (sortBy === 'branch_count') {
+      result.sort((a, b) => {
+        const aCount = (a.branches || []).length;
+        const bCount = (b.branches || []).length;
+        const compare = aCount - bCount;
+        return sortOrder === 'asc' ? compare : -compare;
+      });
+    }
+    
+    return result;
+  }, [companies, search, branchFilter, dateRange, sortBy, sortOrder]);
 
   const getBranchNames = (slugs: string[]) =>
     slugs
       .map(slug => branches.find(b => b.slug === slug)?.name || slug)
       .join(', ');
+
+  const getCurrentSort = () => `${sortBy}-${sortOrder}`;
 
   return (
     <div className="space-y-5">
@@ -161,13 +235,24 @@ export const OrgCompanies: React.FC = () => {
       {/* Table Card */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
         {/* Card Header */}
-        <div className="px-6 py-4 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <div>
-            <h2 className="text-base font-semibold text-slate-900">All Companies</h2>
-            <p className="text-xs text-slate-400 mt-0.5">{companies.length} registered</p>
+        <div className="px-6 py-4 border-b border-slate-200 flex flex-col gap-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div>
+              <h2 className="text-base font-semibold text-slate-900">All Companies</h2>
+              <p className="text-xs text-slate-400 mt-0.5">{filteredCompanies.length} of {companies.length} registered</p>
+            </div>
+            <Button onClick={openCreateModal} size="sm">
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+              </svg>
+              Add Company
+            </Button>
           </div>
-          <div className="flex items-center gap-2">
-            <div className="relative">
+          
+          {/* Filter Controls */}
+          <div className="flex flex-col md:flex-row gap-3 flex-wrap">
+            {/* Search */}
+            <div className="relative flex-1 min-w-[150px]">
               <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
@@ -176,15 +261,66 @@ export const OrgCompanies: React.FC = () => {
                 placeholder="Search companies..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="pl-8 pr-3 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 w-48"
+                className="w-full pl-8 pr-3 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
               />
             </div>
-            <Button onClick={openCreateModal} size="sm">
-              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-              </svg>
-              Add Company
-            </Button>
+
+            {/* Branch Filter */}
+            <select
+              value={branchFilter}
+              onChange={(e) => setBranchFilter(e.target.value)}
+              className="min-w-[160px] px-3 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 bg-white"
+            >
+              <option value="">All Branches</option>
+              {branches.map(b => (
+                <option key={b.slug} value={b.slug}>{b.name}</option>
+              ))}
+            </select>
+
+            {/* Date Range Filter */}
+            <select
+              value={dateRange}
+              onChange={(e) => setDateRange(e.target.value as 'all' | 'week' | 'month' | 'year')}
+              className="min-w-[140px] px-3 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 bg-white"
+            >
+              <option value="all">All Time</option>
+              <option value="week">Last 7 Days</option>
+              <option value="month">Last Month</option>
+              <option value="year">Last Year</option>
+            </select>
+
+            {/* Sort */}
+            <select
+              value={getCurrentSort()}
+              onChange={(e) => {
+                const [value, order] = e.target.value.split('-');
+                setSortBy(value);
+                setSortOrder(order as 'asc' | 'desc');
+              }}
+              className="min-w-[180px] px-3 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 bg-white"
+            >
+              {sortOptions.map(opt => (
+                <option key={`${opt.value}-${opt.order}`} value={`${opt.value}-${opt.order}`}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+
+            {/* Clear Filters */}
+            {(search || branchFilter || dateRange !== 'all' || sortBy !== 'name' || sortOrder !== 'asc') && (
+              <button
+                onClick={() => {
+                  setSearch('');
+                  setBranchFilter('');
+                  setDateRange('all');
+                  setSortBy('name');
+                  setSortOrder('asc');
+                }}
+                className="text-xs text-blue-600 hover:text-blue-800 font-medium whitespace-nowrap"
+              >
+                Clear Filters
+              </button>
+            )}
           </div>
         </div>
 
@@ -194,7 +330,7 @@ export const OrgCompanies: React.FC = () => {
             <div className="w-5 h-5 rounded-full border-2 border-blue-600 border-t-transparent animate-spin" />
             <span className="text-sm text-slate-400">Loading companies...</span>
           </div>
-        ) : filtered.length === 0 ? (
+        ) : filteredCompanies.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mb-3">
               <svg className="w-6 h-6 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -202,63 +338,64 @@ export const OrgCompanies: React.FC = () => {
               </svg>
             </div>
             <p className="text-sm font-medium text-slate-700">
-              {search ? 'No companies match your search.' : 'No companies registered yet.'}
+              {search || branchFilter || dateRange !== 'all' ? 'No companies match your filters.' : 'No companies registered yet.'}
             </p>
-            {!search && (
-              <Button onClick={openCreateModal} variant="outline" size="sm" className="mt-3">
-                Register First Company
-              </Button>
-            )}
           </div>
         ) : (
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50 border-b border-slate-200">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Company Name</th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Code</th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Assigned Branches</th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Registered</th>
-                <th className="px-6 py-3" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {filtered.map((c) => {
-                const assignedNames = getBranchNames(c.branches || []);
-                const count = (c.branches || []).length;
-                return (
-                  <tr key={c.id} className="hover:bg-slate-50 transition-colors">
-                    <td className="px-6 py-4 font-medium text-slate-900">{c.name}</td>
-                    <td className="px-6 py-4">
-                      <code className="text-xs text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded font-mono">{c.code}</code>
-                    </td>
-                    <td className="px-6 py-4">
-                      {count === 0 ? (
-                        <span className="text-xs text-slate-400 italic">No branches assigned</span>
-                      ) : (
-                        <span
-                          className="text-xs text-slate-700"
-                          title={assignedNames}
+          <>
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 border-b border-slate-200">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Company Name</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Code</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Assigned Branches</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Registered</th>
+                  <th className="px-6 py-3" />
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {filteredCompanies.map((c) => {
+                  const assignedNames = getBranchNames(c.branches || []);
+                  const count = (c.branches || []).length;
+                  return (
+                    <tr key={c.id} className="hover:bg-slate-50 transition-colors">
+                      <td className="px-6 py-4 font-medium text-slate-900">{c.name}</td>
+                      <td className="px-6 py-4">
+                        <code className="text-xs text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded font-mono">{c.code}</code>
+                      </td>
+                      <td className="px-6 py-4">
+                        {count === 0 ? (
+                          <span className="text-xs text-slate-400 italic">No branches assigned</span>
+                        ) : (
+                          <span
+                            className="text-xs text-slate-700"
+                            title={assignedNames}
+                          >
+                            {count === 1 ? assignedNames : `${count} branches`}
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 text-slate-500">
+                        {new Date(c.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <button
+                          onClick={() => openEditModal(c)}
+                          className="text-xs text-blue-600 hover:text-blue-800 font-medium"
                         >
-                          {count === 1 ? assignedNames : `${count} branches`}
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 text-slate-500">
-                      {new Date(c.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      <button
-                        onClick={() => openEditModal(c)}
-                        className="text-xs text-blue-600 hover:text-blue-800 font-medium"
-                      >
-                        Edit
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                          Edit
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            {/* Results count */}
+            <div className="px-6 py-3 border-t border-slate-200 text-xs text-slate-400 bg-slate-50/50">
+              Showing {filteredCompanies.length} of {companies.length} companies
+            </div>
+          </>
         )}
       </div>
 

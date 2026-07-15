@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import api from '../../services/api';
 import { Button, Input, Modal } from '../../components/ui';
@@ -60,6 +60,12 @@ interface OrgItemsContext {
   setCategoryError: (msg: string) => void;
 }
 
+type SortOption = {
+  label: string;
+  value: string;
+  order: 'asc' | 'desc';
+};
+
 const inputCls = 'w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition-colors placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20';
 const labelCls = 'block text-xs font-semibold text-slate-700 mb-1.5';
 
@@ -75,6 +81,23 @@ export const OrgItems: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'catalog' | 'categories'>('catalog');
   const [itemSearch, setItemSearch] = useState('');
   const [categorySearch, setCategorySearch] = useState('');
+  
+  // Sort and filter state
+  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>('');
+  const [sortBy, setSortBy] = useState<string>('name');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+
+  // Sort options
+  const sortOptions: SortOption[] = [
+    { label: 'Name (A-Z)', value: 'name', order: 'asc' },
+    { label: 'Name (Z-A)', value: 'name', order: 'desc' },
+    { label: 'Purchase Rate (Low-High)', value: 'purchase_rate', order: 'asc' },
+    { label: 'Purchase Rate (High-Low)', value: 'purchase_rate', order: 'desc' },
+    { label: 'Sales Rate (Low-High)', value: 'sales_rate', order: 'asc' },
+    { label: 'Sales Rate (High-Low)', value: 'sales_rate', order: 'desc' },
+    { label: 'Date Added (Newest)', value: 'created_at', order: 'desc' },
+    { label: 'Date Added (Oldest)', value: 'created_at', order: 'asc' },
+  ];
 
   // Item modal state
   const [showItemModal, setShowItemModal] = useState(false);
@@ -201,16 +224,62 @@ export const OrgItems: React.FC = () => {
     setShowCategoryModal(true);
   };
 
-  const filteredItems = items.filter(i =>
-    i.name.toLowerCase().includes(itemSearch.toLowerCase()) ||
-    i.code.toLowerCase().includes(itemSearch.toLowerCase()) ||
-    i.category_name.toLowerCase().includes(itemSearch.toLowerCase())
-  );
+  // Filter and sort items using useMemo
+  const filteredAndSortedItems = useMemo(() => {
+    let result = [...items];
+    
+    // Search filter
+    if (itemSearch.trim()) {
+      const term = itemSearch.toLowerCase().trim();
+      result = result.filter(item =>
+        item.name.toLowerCase().includes(term) ||
+        item.code.toLowerCase().includes(term) ||
+        (item.sku && item.sku.toLowerCase().includes(term)) ||
+        item.category_name.toLowerCase().includes(term)
+      );
+    }
+    
+    // Category filter
+    if (selectedCategoryFilter) {
+      result = result.filter(item => item.category === selectedCategoryFilter);
+    }
+    
+    // Sort
+    if (sortBy === 'name') {
+      result.sort((a, b) => {
+        const compare = a.name.localeCompare(b.name);
+        return sortOrder === 'asc' ? compare : -compare;
+      });
+    } else if (sortBy === 'sales_rate') {
+      result.sort((a, b) => {
+        const aVal = parseFloat(a.sales_rate || '0');
+        const bVal = parseFloat(b.sales_rate || '0');
+        const compare = aVal - bVal;
+        return sortOrder === 'asc' ? compare : -compare;
+      });
+    } else if (sortBy === 'purchase_rate') {
+      result.sort((a, b) => {
+        const aVal = parseFloat(a.purchase_rate || '0');
+        const bVal = parseFloat(b.purchase_rate || '0');
+        const compare = aVal - bVal;
+        return sortOrder === 'asc' ? compare : -compare;
+      });
+    } else if (sortBy === 'created_at') {
+      result.sort((a, b) => {
+        const compare = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+        return sortOrder === 'asc' ? compare : -compare;
+      });
+    }
+    
+    return result;
+  }, [items, itemSearch, selectedCategoryFilter, sortBy, sortOrder]);
 
   const filteredCats = categories.filter(c =>
     c.name.toLowerCase().includes(categorySearch.toLowerCase()) ||
     c.code.toLowerCase().includes(categorySearch.toLowerCase())
   );
+
+  const getCurrentSort = () => `${sortBy}-${sortOrder}`;
 
   const successMsg = itemSuccess || categorySuccess;
   const errorMsg = itemError || categoryError;
@@ -269,23 +338,11 @@ export const OrgItems: React.FC = () => {
       {/* Items Catalog Tab */}
       {activeTab === 'catalog' && (
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-          <div className="px-6 py-4 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <div>
-              <h2 className="text-base font-semibold text-slate-900">Saleable Items</h2>
-              <p className="text-xs text-slate-400 mt-0.5">{items.length} registered items</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="relative">
-                <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
-                <input
-                  type="text"
-                  placeholder="Search items..."
-                  value={itemSearch}
-                  onChange={(e) => setItemSearch(e.target.value)}
-                  className="pl-8 pr-3 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 w-48"
-                />
+          <div className="px-6 py-4 border-b border-slate-200 flex flex-col gap-4">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div>
+                <h2 className="text-base font-semibold text-slate-900">Saleable Items</h2>
+                <p className="text-xs text-slate-400 mt-0.5">{filteredAndSortedItems.length} of {items.length} items</p>
               </div>
               <Button onClick={openItemModal} size="sm" disabled={categories.length === 0}>
                 <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
@@ -294,6 +351,67 @@ export const OrgItems: React.FC = () => {
                 Add Item
               </Button>
             </div>
+            
+            {/* Filter and Sort Controls */}
+            <div className="flex flex-col sm:flex-row gap-3">
+              {/* Search */}
+              <div className="relative flex-1">
+                <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                <input
+                  type="text"
+                  placeholder="Search by name, code, SKU, or category..."
+                  value={itemSearch}
+                  onChange={(e) => setItemSearch(e.target.value)}
+                  className="w-full pl-8 pr-3 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                />
+              </div>
+
+              {/* Category Filter */}
+              <select
+                value={selectedCategoryFilter}
+                onChange={(e) => setSelectedCategoryFilter(e.target.value)}
+                className="min-w-[160px] px-3 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 bg-white"
+              >
+                <option value="">All Categories</option>
+                {categories.map(cat => (
+                  <option key={cat.id} value={cat.id}>{cat.name}</option>
+                ))}
+              </select>
+
+              {/* Sort */}
+              <select
+                value={getCurrentSort()}
+                onChange={(e) => {
+                  const [value, order] = e.target.value.split('-');
+                  setSortBy(value);
+                  setSortOrder(order as 'asc' | 'desc');
+                }}
+                className="min-w-[180px] px-3 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 bg-white"
+              >
+                {sortOptions.map(opt => (
+                  <option key={`${opt.value}-${opt.order}`} value={`${opt.value}-${opt.order}`}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+
+              {/* Clear Filters */}
+              {(itemSearch || selectedCategoryFilter || sortBy !== 'name' || sortOrder !== 'asc') && (
+                <button
+                  onClick={() => {
+                    setItemSearch('');
+                    setSelectedCategoryFilter('');
+                    setSortBy('name');
+                    setSortOrder('asc');
+                  }}
+                  className="text-xs text-blue-600 hover:text-blue-800 font-medium whitespace-nowrap"
+                >
+                  Clear Filters
+                </button>
+              )}
+            </div>
           </div>
 
           {isItemsLoading ? (
@@ -301,7 +419,7 @@ export const OrgItems: React.FC = () => {
               <div className="w-5 h-5 rounded-full border-2 border-blue-600 border-t-transparent animate-spin" />
               <span className="text-sm text-slate-400">Loading items...</span>
             </div>
-          ) : filteredItems.length === 0 ? (
+          ) : filteredAndSortedItems.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 text-center">
               <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mb-3">
                 <svg className="w-6 h-6 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -309,9 +427,9 @@ export const OrgItems: React.FC = () => {
                 </svg>
               </div>
               <p className="text-sm font-medium text-slate-700">
-                {itemSearch ? 'No items match your search.' : 'No items registered yet.'}
+                {itemSearch || selectedCategoryFilter ? 'No items match your filters.' : 'No items registered yet.'}
               </p>
-              {!itemSearch && categories.length === 0 && (
+              {!itemSearch && !selectedCategoryFilter && categories.length === 0 && (
                 <p className="text-xs text-slate-400 mt-1">Create at least one category before adding items.</p>
               )}
             </div>
@@ -329,7 +447,7 @@ export const OrgItems: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {filteredItems.map((item) => (
+                  {filteredAndSortedItems.map((item) => (
                     <tr key={item.id} className="hover:bg-slate-50 transition-colors">
                       <td className="px-6 py-4 font-medium text-slate-900 whitespace-nowrap">{item.name}</td>
                       <td className="px-6 py-4">
