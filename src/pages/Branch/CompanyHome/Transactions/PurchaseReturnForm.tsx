@@ -222,6 +222,7 @@ const PurchaseReturnForm: React.FC = () => {
     ]);
   };
 
+  /*
   // Handle changing an item inside a row dropdown
   const handleRowItemChange = (index: number, itemId: string) => {
     if (!itemId) {
@@ -356,6 +357,7 @@ const PurchaseReturnForm: React.FC = () => {
     }
     setLineItems(lineItems.filter((_, idx) => idx !== index));
   };
+  */
 
   // Totals calculations
   const subtotalSum = lineItems.reduce((sum, li) => sum + (parseFloat(li.amount) || 0), 0);

@@ -40,6 +40,7 @@ export const AccountsOpening: React.FC = () => {
   // Sorting states
   const [sortBy, setSortBy] = useState<string>('name');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+  const [searchQuery, setSearchQuery] = useState('');
 
   const sortOptions: SortOption[] = [
     { label: 'Account Name (A-Z)', value: 'name_asc', sortBy: 'name', order: 'asc' },
@@ -56,29 +57,36 @@ export const AccountsOpening: React.FC = () => {
   };
 
   const sortAccounts = useCallback((data: any[]) => {
-    const sorted = [...data];
+    let filtered = [...data];
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      filtered = filtered.filter(item => 
+        item.name.toLowerCase().includes(q) || 
+        item.code.toLowerCase().includes(q)
+      );
+    }
     if (sortBy === 'name') {
-      sorted.sort((a, b) => {
+      filtered.sort((a, b) => {
         const compare = a.name.localeCompare(b.name);
         return sortOrder === 'asc' ? compare : -compare;
       });
     } else if (sortBy === 'balance') {
-      sorted.sort((a, b) => {
+      filtered.sort((a, b) => {
         const aVal = parseFloat(a.balance || '0');
         const bVal = parseFloat(b.balance || '0');
         const compare = aVal - bVal;
         return sortOrder === 'asc' ? compare : -compare;
       });
     } else if (sortBy === 'opening_balance') {
-      sorted.sort((a, b) => {
+      filtered.sort((a, b) => {
         const aVal = parseFloat(a.opening_balance || '0');
         const bVal = parseFloat(b.opening_balance || '0');
         const compare = aVal - bVal;
         return sortOrder === 'asc' ? compare : -compare;
       });
     }
-    return sorted;
-  }, [sortBy, sortOrder]);
+    return filtered;
+  }, [sortBy, sortOrder, searchQuery]);
 
   useEffect(() => {
     setLocalAccounts(sortAccounts(accounts));
@@ -159,24 +167,55 @@ export const AccountsOpening: React.FC = () => {
           <h1 className="text-2xl font-bold text-slate-900">Chart of Accounts / Ledger</h1>
           <p className="mt-0.5 text-sm text-slate-500">Manage organization and branch ledger accounts.</p>
         </div>
-        <div className="flex items-center gap-3">
-          <div className="min-w-[180px]">
-            <select
-              value={getCurrentSortValue()}
-              onChange={handleSortChange}
-              className="w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-sm text-slate-900 outline-none transition-colors focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+        {canCreate && (
+          <button onClick={openAddModal} className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-700">
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
+            Add Account
+          </button>
+        )}
+      </div>
+
+      {/* Filters Bar */}
+      <div className="flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="relative flex-1 min-w-[240px]">
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search by account name or code..."
+            className="w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2 pl-9 pr-9 text-sm text-slate-900 outline-none transition-colors placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+          />
+          <svg 
+            className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" 
+            fill="none" 
+            viewBox="0 0 24 24" 
+            stroke="currentColor" 
+            strokeWidth={2}
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
             >
-              {sortOptions.map(opt => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
-              ))}
-            </select>
-          </div>
-          {canCreate && (
-            <button onClick={openAddModal} className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-700">
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
-              Add Account
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
             </button>
           )}
+        </div>
+
+        <div className="min-w-[180px]">
+          <select
+            value={getCurrentSortValue()}
+            onChange={handleSortChange}
+            className="w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-sm text-slate-900 outline-none transition-colors focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+          >
+            {sortOptions.map(opt => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
         </div>
       </div>
 

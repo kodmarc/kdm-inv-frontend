@@ -21,7 +21,6 @@ export const OrderBookers: React.FC = () => {
   const { orderBookers, fetchOrderBookers, setSuccess } = useOutletContext<CompanyHomeLayoutContextType>();
 
   const [localOrderBookers, setLocalOrderBookers] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
   
   const [showRegisterModal, setShowRegisterModal] = useState(false);
   const [editingRecord, setEditingRecord] = useState<any>(null);
@@ -42,6 +41,7 @@ export const OrderBookers: React.FC = () => {
   // Sorting states
   const [sortBy, setSortBy] = useState<string>('name');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+  const [searchQuery, setSearchQuery] = useState('');
 
   const sortOptions: SortOption[] = [
     { label: 'Name (A-Z)', value: 'name_asc', sortBy: 'name', order: 'asc' },
@@ -53,21 +53,32 @@ export const OrderBookers: React.FC = () => {
     return found ? found.value : 'name_asc';
   };
 
-  // Sort function
-  const sortOrderBookers = useCallback((data: any[]) => {
-    const sorted = [...data];
+  // Sort function with search filter
+  const sortAndFilterOrderBookers = useCallback((data: any[]) => {
+    let filtered = [...data];
+    
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      filtered = filtered.filter(item => 
+        item.name.toLowerCase().includes(q) || 
+        item.contact_no.toLowerCase().includes(q) || 
+        (item.email && item.email.toLowerCase().includes(q))
+      );
+    }
+    
     if (sortBy === 'name') {
-      sorted.sort((a, b) => {
+      filtered.sort((a, b) => {
         const compare = a.name.localeCompare(b.name);
         return sortOrder === 'asc' ? compare : -compare;
       });
     }
-    return sorted;
-  }, [sortBy, sortOrder]);
+    
+    return filtered;
+  }, [sortBy, sortOrder, searchQuery]);
 
   useEffect(() => {
-    setLocalOrderBookers(sortOrderBookers(orderBookers));
-  }, [orderBookers, sortOrderBookers]);
+    setLocalOrderBookers(sortAndFilterOrderBookers(orderBookers));
+  }, [orderBookers, sortAndFilterOrderBookers]);
 
   const handleSortChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const selected = sortOptions.find(opt => opt.value === e.target.value);
@@ -154,43 +165,86 @@ export const OrderBookers: React.FC = () => {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-4">
+      {/* Header with Title and Add Button on Right */}
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Order Bookers</h1>
           <p className="mt-0.5 text-sm text-slate-500">Manage individuals responsible for taking orders.</p>
         </div>
-        <div className="flex items-center gap-3">
-          <div className="min-w-[160px]">
-            <select
-              value={getCurrentSortValue()}
-              onChange={handleSortChange}
-              className="w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-sm text-slate-900 outline-none transition-colors focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+        {canCreate && (
+          <button onClick={openAddModal} className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-700 shrink-0">
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+            </svg>
+            Add Order Booker
+          </button>
+        )}
+      </div>
+
+      {/* Search Bar + Sort Dropdown - Full width search, normal sort */}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative flex-1 min-w-[200px]">
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search by name, contact, or email..."
+            className="w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2 pl-9 pr-9 text-sm text-slate-900 outline-none transition-colors placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+          />
+          <svg 
+            className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" 
+            fill="none" 
+            viewBox="0 0 24 24" 
+            stroke="currentColor" 
+            strokeWidth={2}
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
             >
-              {sortOptions.map(opt => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
-              ))}
-            </select>
-          </div>
-          {canCreate && (
-            <button onClick={openAddModal} className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-700">
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
-              Add Order Booker
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
             </button>
           )}
         </div>
+
+        <div className="min-w-[160px]">
+          <select
+            value={getCurrentSortValue()}
+            onChange={handleSortChange}
+            className="w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-sm text-slate-900 outline-none transition-colors focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+          >
+            {sortOptions.map(opt => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+        </div>
       </div>
 
+      {/* Table */}
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         {localOrderBookers.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
-            <p className="text-sm font-semibold text-slate-700">No order bookers registered</p>
-            <p className="mt-1 text-xs text-slate-400">Click "Add Order Booker" to register the first one.</p>
+            <p className="text-sm font-semibold text-slate-700">
+              {searchQuery ? 'No order bookers found matching your search' : 'No order bookers registered'}
+            </p>
+            <p className="mt-1 text-xs text-slate-400">
+              {searchQuery ? 'Try adjusting your search terms' : 'Click "Add Order Booker" to register the first one.'}
+            </p>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="border-b border-slate-200 bg-slate-50">
-                <tr>{['Name', 'Contact No', 'Email', 'Scope', 'Status', 'Actions'].map(h => <th key={h} className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">{h}</th>)}</tr>
+                <tr>
+                  {['Name', 'Contact No', 'Email', 'Scope', 'Status', 'Actions'].map(h => (
+                    <th key={h} className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">{h}</th>
+                  ))}
+                </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {localOrderBookers.map(item => (
@@ -198,9 +252,24 @@ export const OrderBookers: React.FC = () => {
                     <td className="px-6 py-4 font-medium text-slate-900">{item.name}</td>
                     <td className="px-6 py-4 text-slate-600">{item.contact_no}</td>
                     <td className="px-6 py-4 text-slate-500">{item.email || '—'}</td>
-                    <td className="px-6 py-4"><Badge color={item.branch ? 'blue' : 'slate'}>{item.branch ? `Branch: ${item.branch}` : 'Global'}</Badge></td>
-                    <td className="px-6 py-4"><Badge color={item.is_active ? 'green' : 'red'}>{item.is_active ? 'Active' : 'Inactive'}</Badge></td>
-                    <td className="px-6 py-4"><button onClick={() => openEditModal(item)} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:border-slate-400 hover:text-slate-900">Edit</button></td>
+                    <td className="px-6 py-4">
+                      <Badge color={item.branch ? 'blue' : 'slate'}>
+                        {item.branch ? `Branch: ${item.branch}` : 'Global'}
+                      </Badge>
+                    </td>
+                    <td className="px-6 py-4">
+                      <Badge color={item.is_active ? 'green' : 'red'}>
+                        {item.is_active ? 'Active' : 'Inactive'}
+                      </Badge>
+                    </td>
+                    <td className="px-6 py-4">
+                      <button 
+                        onClick={() => openEditModal(item)} 
+                        className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:border-slate-400 hover:text-slate-900"
+                      >
+                        Edit
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -209,7 +278,7 @@ export const OrderBookers: React.FC = () => {
         )}
       </div>
 
-      {/* Modals remain the same */}
+      {/* Modals */}
       {showRegisterModal && (
         <ModalShell title="Register New Order Booker" subtitle="Add an order booker to this branch" onClose={() => setShowRegisterModal(false)} onSubmit={handleCreateRegister} error={regError} fieldErrors={regFieldErrors}>
           {(fe: any) => (<>
@@ -242,3 +311,5 @@ export const OrderBookers: React.FC = () => {
     </div>
   );
 };
+
+export default OrderBookers;

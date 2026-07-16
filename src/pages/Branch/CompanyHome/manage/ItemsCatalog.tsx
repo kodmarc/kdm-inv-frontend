@@ -1,9 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useOutletContext } from 'react-router-dom';
-import type { CompanyHomeLayoutContextType } from '../CompanyHomeLayout';
 import { Badge } from '../../../../components/ui';
 import api from '../../../../services/api';
-import { useAuth } from '../../../../context/AuthContext';
 
 type SortOption = {
   label: string;
@@ -22,9 +19,6 @@ function useDebounce<T>(value: T, delay: number): T {
 }
 
 export const ItemsCatalog: React.FC = () => {
-  const { user } = useAuth();
-  const { setSuccess } = useOutletContext<CompanyHomeLayoutContextType>();
-  
   const [items, setItems] = useState<any[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
   const [companies, setCompanies] = useState<any[]>([]);
@@ -57,7 +51,6 @@ export const ItemsCatalog: React.FC = () => {
     return found ? found.value : 'name_asc';
   };
 
-  // ✅ FIXED: Proper sorting with null/empty values at the end
   const sortItemsLocally = useCallback((data: any[]) => {
     const sorted = [...data];
     
@@ -70,14 +63,12 @@ export const ItemsCatalog: React.FC = () => {
       });
     } else if (sortBy === 'sales_rate') {
       sorted.sort((a, b) => {
-        // Parse values, treat null/empty as -Infinity so they go to the end
         const aVal = a.sales_rate !== null && a.sales_rate !== '' && a.sales_rate !== undefined 
           ? parseFloat(a.sales_rate) 
           : (sortOrder === 'desc' ? -Infinity : Infinity);
         const bVal = b.sales_rate !== null && b.sales_rate !== '' && b.sales_rate !== undefined 
           ? parseFloat(b.sales_rate) 
           : (sortOrder === 'desc' ? -Infinity : Infinity);
-        
         const compare = aVal - bVal;
         return sortOrder === 'asc' ? compare : -compare;
       });
@@ -89,7 +80,6 @@ export const ItemsCatalog: React.FC = () => {
         const bVal = b.purchase_rate !== null && b.purchase_rate !== '' && b.purchase_rate !== undefined 
           ? parseFloat(b.purchase_rate) 
           : (sortOrder === 'desc' ? -Infinity : Infinity);
-        
         const compare = aVal - bVal;
         return sortOrder === 'asc' ? compare : -compare;
       });
@@ -101,7 +91,6 @@ export const ItemsCatalog: React.FC = () => {
         const bVal = b.current_stock !== null && b.current_stock !== undefined 
           ? parseFloat(b.current_stock) 
           : (sortOrder === 'desc' ? -Infinity : Infinity);
-        
         const compare = aVal - bVal;
         return sortOrder === 'asc' ? compare : -compare;
       });
@@ -116,37 +105,39 @@ export const ItemsCatalog: React.FC = () => {
     return sorted;
   }, [sortBy, sortOrder]);
 
-  // Use local sorting since backend sorting might not handle nulls properly
   const fetchItems = useCallback(async () => {
     try {
       setLoading(true);
       setError('');
       
-      // Fetch all items without sorting from backend (or with basic sorting)
       let url = `/items/`;
       
+      const params = new URLSearchParams();
+      
       if (selectedCategory) {
-        url += `?category=${selectedCategory}`;
+        params.append('category', selectedCategory);
       }
       if (selectedCompany) {
-        url += `${selectedCategory ? '&' : '?'}company=${selectedCompany}`;
+        params.append('company', selectedCompany);
       }
       if (debouncedSearch.trim()) {
-        url += `${selectedCategory || selectedCompany ? '&' : '?'}search=${encodeURIComponent(debouncedSearch.trim())}`;
+        params.append('search', debouncedSearch.trim());
+      }
+      
+      const queryString = params.toString();
+      if (queryString) {
+        url += `?${queryString}`;
       }
       
       const response = await api.get(url);
-      
-      // Apply local sorting with proper null handling
       const sortedData = sortItemsLocally(response.data);
       setItems(sortedData);
     } catch (err: any) {
       setError(err.response?.data?.message || 'Failed to fetch items.');
-      console.error('Error fetching items:', err);
     } finally {
       setLoading(false);
     }
-  }, [sortItemsLocally, selectedCategory, selectedCompany, debouncedSearch]);
+  }, [selectedCategory, selectedCompany, debouncedSearch, sortItemsLocally]);
 
   const fetchFilters = useCallback(async () => {
     try {
@@ -156,8 +147,8 @@ export const ItemsCatalog: React.FC = () => {
       ]);
       setCategories(categoriesRes.data || []);
       setCompanies(companiesRes.data || []);
-    } catch (err) {
-      console.error('Error fetching filter data:', err);
+    } catch {
+      // Silent fail
     }
   }, []);
 
@@ -169,8 +160,8 @@ export const ItemsCatalog: React.FC = () => {
     if (selected) {
       setSortBy(selected.sortBy);
       setSortOrder(selected.order);
-      // Re-fetch with new sort
-      fetchItems();
+      const sortedData = sortItemsLocally(items);
+      setItems(sortedData);
     }
   };
 
@@ -180,6 +171,7 @@ export const ItemsCatalog: React.FC = () => {
     setSearchQuery('');
     setSelectedCategory('');
     setSelectedCompany('');
+    setTimeout(fetchItems, 0);
   };
 
   const clearSearch = () => {
@@ -196,7 +188,6 @@ export const ItemsCatalog: React.FC = () => {
         {!loading && <div className="text-xs text-slate-400">{items.length} items found</div>}
       </div>
 
-      {/* Filters Bar */}
       <div className="flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="relative flex-1 min-w-[200px]">
           <input
@@ -277,7 +268,6 @@ export const ItemsCatalog: React.FC = () => {
         </button>
       </div>
 
-      {/* Items Table */}
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         {loading ? (
           <div className="flex items-center justify-center py-16">
@@ -333,7 +323,7 @@ export const ItemsCatalog: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {items.map(item => (
+                {items.map((item) => (
                   <tr key={item.id} className="transition-colors hover:bg-slate-50">
                     <td className="px-4 py-3.5 font-medium text-slate-900">{item.name}</td>
                     <td className="px-4 py-3.5">
