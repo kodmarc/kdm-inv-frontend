@@ -53,6 +53,7 @@ const roleLabels: Record<string, string> = {
   KPO: 'KPO Cashier',
 };
 
+/*
 const roleColors: Record<string, 'purple' | 'blue' | 'green' | 'amber' | 'slate'> = {
   ORG_ADMIN: 'purple',
   ORG_USER: 'blue',
@@ -60,6 +61,7 @@ const roleColors: Record<string, 'purple' | 'blue' | 'green' | 'amber' | 'slate'
   USER: 'green',
   KPO: 'amber',
 };
+*/
 
 // Chart colors
 const chartColors = ['#8B5CF6', '#3B82F6', '#06B6D4', '#10B981', '#F59E0B'];

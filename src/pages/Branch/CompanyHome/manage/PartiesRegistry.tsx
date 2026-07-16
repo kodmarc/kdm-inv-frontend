@@ -21,6 +21,7 @@ export const PartiesRegistry: React.FC = () => {
   const { parties, fetchParties, setSuccess } = useOutletContext<CompanyHomeLayoutContextType>();
 
   const [localParties, setLocalParties] = useState<any[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const [showRegisterModal, setShowRegisterModal] = useState(false);
   const [editingRecord, setEditingRecord] = useState<any>(null);
@@ -51,14 +52,15 @@ export const PartiesRegistry: React.FC = () => {
   // Sorting states
   const [sortBy, setSortBy] = useState<string>('name');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+  
 
   const sortOptions: SortOption[] = [
     { label: 'Name (A-Z)', value: 'name_asc', sortBy: 'name', order: 'asc' },
     { label: 'Name (Z-A)', value: 'name_desc', sortBy: 'name', order: 'desc' },
     { label: 'Role (Supplier First)', value: 'role_supplier_asc', sortBy: 'role_supplier', order: 'asc' },
     { label: 'Role (Party First)', value: 'role_party_asc', sortBy: 'role_party', order: 'asc' },
-    { label: 'Scope (Branch First)', value: 'scope_asc', sortBy: 'scope', order: 'asc' },
-    { label: 'Scope (Global First)', value: 'scope_desc', sortBy: 'scope', order: 'desc' },
+    { label: 'Status (Active First)', value: 'status_active_asc', sortBy: 'status', order: 'asc' },
+    { label: 'Status (Inactive First)', value: 'status_inactive_desc', sortBy: 'status', order: 'desc' },
   ];
 
   const getCurrentSortValue = () => {
@@ -67,36 +69,44 @@ export const PartiesRegistry: React.FC = () => {
   };
 
   const sortParties = useCallback((data: any[]) => {
-    const sorted = [...data];
+    let filtered = [...data];
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      filtered = filtered.filter(item => 
+        item.name.toLowerCase().includes(q) || 
+        item.contact_no.toLowerCase().includes(q) || 
+        (item.email && item.email.toLowerCase().includes(q))
+      );
+    }
     if (sortBy === 'name') {
-      sorted.sort((a, b) => {
+      filtered.sort((a, b) => {
         const compare = a.name.localeCompare(b.name);
         return sortOrder === 'asc' ? compare : -compare;
       });
     } else if (sortBy === 'role_supplier') {
-      sorted.sort((a, b) => {
+      filtered.sort((a, b) => {
         const aVal = a.is_supplier ? 1 : 0;
         const bVal = b.is_supplier ? 1 : 0;
-        const compare = aVal - bVal;
+        const compare = bVal - aVal;
         return sortOrder === 'asc' ? compare : -compare;
       });
     } else if (sortBy === 'role_party') {
-      sorted.sort((a, b) => {
+      filtered.sort((a, b) => {
         const aVal = a.is_party ? 1 : 0;
         const bVal = b.is_party ? 1 : 0;
-        const compare = aVal - bVal;
+        const compare = bVal - aVal;
         return sortOrder === 'asc' ? compare : -compare;
       });
-    } else if (sortBy === 'scope') {
-      sorted.sort((a, b) => {
-        const aScope = a.branch ? 1 : 0;
-        const bScope = b.branch ? 1 : 0;
-        const compare = aScope - bScope;
+    } else if (sortBy === 'status') {
+      filtered.sort((a, b) => {
+        const aVal = a.is_active ? 1 : 0;
+        const bVal = b.is_active ? 1 : 0;
+        const compare = bVal - aVal;
         return sortOrder === 'asc' ? compare : -compare;
       });
     }
-    return sorted;
-  }, [sortBy, sortOrder]);
+    return filtered;
+  }, [sortBy, sortOrder, searchQuery]);
 
   useEffect(() => {
     setLocalParties(sortParties(parties));
@@ -197,24 +207,55 @@ export const PartiesRegistry: React.FC = () => {
           <h1 className="text-2xl font-bold text-slate-900">Suppliers & Parties Registry</h1>
           <p className="mt-0.5 text-sm text-slate-500">Manage vendors, retailers, shops, and partners for purchase and sales operations.</p>
         </div>
-        <div className="flex items-center gap-3">
-          <div className="min-w-[180px]">
-            <select
-              value={getCurrentSortValue()}
-              onChange={handleSortChange}
-              className="w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-sm text-slate-900 outline-none transition-colors focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+        {canCreate && (
+          <button onClick={openAddModal} className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-700">
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
+            Add Supplier / Party
+          </button>
+        )}
+      </div>
+
+      {/* Filters Bar */}
+      <div className="flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="relative flex-1 min-w-[240px]">
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search by name, contact, or email..."
+            className="w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2 pl-9 pr-9 text-sm text-slate-900 outline-none transition-colors placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+          />
+          <svg 
+            className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" 
+            fill="none" 
+            viewBox="0 0 24 24" 
+            stroke="currentColor" 
+            strokeWidth={2}
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
             >
-              {sortOptions.map(opt => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
-              ))}
-            </select>
-          </div>
-          {canCreate && (
-            <button onClick={openAddModal} className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-700">
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
-              Add Supplier / Party
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
             </button>
           )}
+        </div>
+
+        <div className="min-w-[180px]">
+          <select
+            value={getCurrentSortValue()}
+            onChange={handleSortChange}
+            className="w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-sm text-slate-900 outline-none transition-colors focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+          >
+            {sortOptions.map(opt => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
         </div>
       </div>
 
@@ -231,7 +272,7 @@ export const PartiesRegistry: React.FC = () => {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="border-b border-slate-200 bg-slate-50">
-                <tr>{['Name', 'Contact', 'Roles', 'NTN / GST', 'Credit Limit', 'Balance', 'Scope', 'Status', 'Actions'].map(h => <th key={h} className="whitespace-nowrap px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">{h}</th>)}</tr>
+                <tr>{['Name', 'Contact', 'Roles', 'NTN / GST', 'Credit Limit', 'Balance', 'Status', 'Actions'].map(h => <th key={h} className="whitespace-nowrap px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">{h}</th>)}</tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {localParties.map(item => (
@@ -251,7 +292,6 @@ export const PartiesRegistry: React.FC = () => {
                     </td>
                     <td className="px-5 py-4 text-slate-600">Rs. {parseFloat(item.credit_limit).toFixed(2)}</td>
                     <td className="px-5 py-4 text-slate-600">Rs. {parseFloat(item.balance_amount).toFixed(2)}</td>
-                    <td className="px-5 py-4"><Badge color={item.branch ? 'blue' : 'slate'}>{item.branch ? `Branch: ${item.branch}` : 'Global'}</Badge></td>
                     <td className="px-5 py-4"><Badge color={item.is_active ? 'green' : 'red'}>{item.is_active ? 'Active' : 'Inactive'}</Badge></td>
                     <td className="px-5 py-4"><button onClick={() => openEditModal(item)} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:border-slate-400 hover:text-slate-900">Edit</button></td>
                   </tr>
