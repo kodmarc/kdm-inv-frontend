@@ -396,29 +396,29 @@ const fetchItems = async (sortBy?: string, sortOrder?: string) => {
             )}
           </div>
 
-          {/* Transactions */}
-          <div className="relative">
-            <button onClick={(e) => toggle('transactions', e)} className={navBtnCls(isTransactionsActive)}>
-              Transactions <Chevron />
-            </button>
-            {openDropdown === 'transactions' && (
-              <div className="absolute left-0 top-full z-50 mt-1.5 w-52 overflow-hidden rounded-xl border border-slate-200 bg-white p-1 shadow-xl">
-                {[
-                  ['Purchase Invoice', 'purchase-invoice'],
-                  ['Sales Invoice', 'sales-invoice'],
-                  ['Purchase Return', 'purchase-return'],
-                  ['Damage Return', 'damage-return'],
-                  ['Damage Receiving', 'damage-receiving'],
-                  ['Load Form', 'load-form'],
-                  ['Daily Sales Report', 'daily-sales-report'],
-                ].map(([label, sub]) => (
-                  <button key={sub} onClick={() => go(getSubRoutePath(sub))} className={dropItemCls(isActive(sub))}>
-                    {label}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+
+{/* Transactions */}
+<div className="relative">
+  <button onClick={(e) => toggle('transactions', e)} className={navBtnCls(isTransactionsActive)}>
+    Transactions <Chevron />
+  </button>
+  {openDropdown === 'transactions' && (
+    <div className="absolute left-0 top-full z-50 mt-1.5 w-52 overflow-hidden rounded-xl border border-slate-200 bg-white p-1 shadow-xl">
+      {[
+        ['Purchase Invoice', 'purchase-invoice'],
+        ['Sales Invoice', 'sales-invoice'],
+        ['Purchase Return', 'purchase-return'],
+        ['Sales Return', 'sales-return'],
+        ['Load Form', 'load-form'],
+        ['Daily Sales Report', 'daily-sales-report'],
+      ].map(([label, sub]) => (
+        <button key={sub} onClick={() => go(getSubRoutePath(sub))} className={dropItemCls(isActive(sub))}>
+          {label}
+        </button>
+      ))}
+    </div>
+  )}
+</div>
 
           {/* Account */}
           <div className="relative">

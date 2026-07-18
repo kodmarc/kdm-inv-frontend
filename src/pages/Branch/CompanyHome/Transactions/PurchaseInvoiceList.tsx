@@ -278,3 +278,5 @@ export const PurchaseInvoiceList: React.FC = () => {
     </div>
   );
 };
+
+export default PurchaseInvoiceList;

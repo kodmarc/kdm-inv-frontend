@@ -295,3 +295,5 @@ export const SalesInvoiceList: React.FC = () => {
     </div>
   );
 };
+
+export default SalesInvoiceList;

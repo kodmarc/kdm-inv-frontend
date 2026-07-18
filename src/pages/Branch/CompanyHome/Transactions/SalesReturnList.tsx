@@ -10,7 +10,7 @@ type SortOption = {
   order: 'asc' | 'desc';
 };
 
-export const DamageReceivingList: React.FC = () => {
+export const SalesReturnList: React.FC = () => {
   const navigate = useNavigate();
   const { branchSlug, companySlug } = useParams<{ branchSlug: string; companySlug: string }>();
 
@@ -20,14 +20,15 @@ export const DamageReceivingList: React.FC = () => {
     setError
   } = useOutletContext<CompanyHomeLayoutContextType>();
 
-  const [receivings, setReceivings] = useState<any[]>([]);
+  const [returns, setReturns] = useState<any[]>([]);
   const [isListLoading, setIsListLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'paid'>('all');
+  const [returnTypeFilter, setReturnTypeFilter] = useState<'all' | 'normal' | 'damage'>('all');
   
   const [sortBy, setSortBy] = useState<string>('created_at');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
-  const [localReceivings, setLocalReceivings] = useState<any[]>([]);
+  const [localReturns, setLocalReturns] = useState<any[]>([]);
 
   const sortOptions: SortOption[] = [
     { label: 'Newest First', value: 'created_at_desc', sortBy: 'created_at', order: 'desc' },
@@ -40,24 +41,40 @@ export const DamageReceivingList: React.FC = () => {
     { label: 'Salesman (Z-A)', value: 'salesman_name_desc', sortBy: 'salesman_name', order: 'desc' },
   ];
 
+  const statusOptions = [
+    { label: 'All', value: 'all' },
+    { label: 'Pending', value: 'pending' },
+    { label: 'Paid', value: 'paid' },
+  ];
+
+  const typeOptions = [
+    { label: 'All Types', value: 'all' },
+    { label: 'Normal', value: 'normal' },
+    { label: 'Damage', value: 'damage' },
+  ];
+
   const getCurrentSortValue = () => {
     const found = sortOptions.find(opt => opt.sortBy === sortBy && opt.order === sortOrder);
     return found ? found.value : 'created_at_desc';
   };
 
-  const sortAndFilterReceivings = useCallback((data: any[]) => {
+  const sortAndFilterReturns = useCallback((data: any[]) => {
     let filtered = [...data];
     
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();
       filtered = filtered.filter(ret =>
-        ret.damage_receiving_code?.toLowerCase().includes(q) ||
+        ret.sales_return_code?.toLowerCase().includes(q) ||
         ret.party_name?.toLowerCase().includes(q)
       );
     }
     
     if (statusFilter !== 'all') {
       filtered = filtered.filter(ret => ret.status === statusFilter);
+    }
+    
+    if (returnTypeFilter !== 'all') {
+      filtered = filtered.filter(ret => ret.return_type === returnTypeFilter);
     }
     
     if (sortBy === 'created_at') {
@@ -85,27 +102,27 @@ export const DamageReceivingList: React.FC = () => {
     }
     
     return filtered;
-  }, [sortBy, sortOrder, searchQuery, statusFilter]);
+  }, [sortBy, sortOrder, searchQuery, statusFilter, returnTypeFilter]);
 
-  const fetchReceivings = async () => {
+  const fetchReturns = async () => {
     setIsListLoading(true);
     try {
-      const res = await api.get('/damage-receivings/');
-      setReceivings(res.data);
+      const res = await api.get('/sales-returns/');
+      setReturns(res.data);
     } catch (err) {
-      console.error('Failed to fetch damage receivings', err);
+      console.error('Failed to fetch sales returns', err);
     } finally {
       setIsListLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchReceivings();
+    fetchReturns();
   }, [companySlug]);
 
   useEffect(() => {
-    setLocalReceivings(sortAndFilterReceivings(receivings));
-  }, [receivings, sortAndFilterReceivings]);
+    setLocalReturns(sortAndFilterReturns(returns));
+  }, [returns, sortAndFilterReturns]);
 
   const handleSortChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const selected = sortOptions.find(opt => opt.value === e.target.value);
@@ -118,9 +135,9 @@ export const DamageReceivingList: React.FC = () => {
   const handleToggleStatus = async (id: string, currentStatus: string) => {
     const nextStatus = currentStatus === 'pending' ? 'paid' : 'pending';
     try {
-      await api.post(`/damage-receivings/${id}/change-status/`, { status: nextStatus });
+      await api.post(`/sales-returns/${id}/change-status/`, { status: nextStatus });
       setSuccess(`Status updated to ${nextStatus.toUpperCase()}`);
-      fetchReceivings();
+      fetchReturns();
       setTimeout(() => setSuccess(''), 3000);
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to toggle status.');
@@ -129,39 +146,42 @@ export const DamageReceivingList: React.FC = () => {
   };
 
   const handleDownloadPDF = (id: string) => {
-    const url = `${api.defaults.baseURL}/damage-receivings/${id}/download-pdf/`;
+    const url = `${api.defaults.baseURL}/sales-returns/${id}/download-pdf/`;
     window.open(url, '_blank');
   };
 
-  const companyReceivings = localReceivings.filter(ret => ret.company === activeCompany?.id);
+  const companyReturns = localReturns.filter(ret => ret.company === activeCompany?.id);
 
   return (
     <div className="space-y-5">
+      {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Damage Receiving</h1>
+          <h1 className="text-2xl font-bold text-slate-900">Sales Returns</h1>
           <p className="mt-0.5 text-sm text-slate-500">
-            Manage broken or faulted product returns received from customers, and record cash/outstanding ledger adjustments.
+            Manage product returns from customers, record credit adjustments, and verify refund receipts.
           </p>
         </div>
         <button
-          onClick={() => navigate(`/branch/${branchSlug}/company/${companySlug}/damage-receiving/new`)}
+          onClick={() => navigate(`/branch/${branchSlug}/company/${companySlug}/sales-return/new`)}
           className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-700 shrink-0"
         >
           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
           </svg>
-          New Damage Receiving
+          New Sales Return
         </button>
       </div>
 
+      {/* Filters - All Dropdowns */}
       <div className="flex flex-wrap items-center gap-3">
+        {/* Search */}
         <div className="relative flex-1 min-w-[200px]">
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search code or customer..."
+            placeholder="Search return code or customer..."
             className="w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2 pl-9 pr-9 text-sm text-slate-900 outline-none transition-colors placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
           />
           <svg 
@@ -185,6 +205,7 @@ export const DamageReceivingList: React.FC = () => {
           )}
         </div>
 
+        {/* Sort Dropdown */}
         <div className="min-w-[180px]">
           <select
             value={getCurrentSortValue()}
@@ -197,38 +218,49 @@ export const DamageReceivingList: React.FC = () => {
           </select>
         </div>
 
-        <div className="flex bg-slate-100 p-0.5 rounded-lg border border-slate-200/50">
-          {(['all', 'pending', 'paid'] as const).map((filter) => (
-            <button
-              key={filter}
-              onClick={() => setStatusFilter(filter)}
-              className={`text-xs font-semibold px-3 py-1.5 rounded-md transition-all cursor-pointer capitalize ${
-                statusFilter === filter
-                  ? 'bg-white text-navy shadow-sm'
-                  : 'text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              {filter}
-            </button>
-          ))}
+        {/* Status Dropdown */}
+        <div className="min-w-[140px]">
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as 'all' | 'pending' | 'paid')}
+            className="w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-sm text-slate-900 outline-none transition-colors focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+          >
+            {statusOptions.map(opt => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Type Dropdown */}
+        <div className="min-w-[140px]">
+          <select
+            value={returnTypeFilter}
+            onChange={(e) => setReturnTypeFilter(e.target.value as 'all' | 'normal' | 'damage')}
+            className="w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-sm text-slate-900 outline-none transition-colors focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+          >
+            {typeOptions.map(opt => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
         </div>
       </div>
 
+      {/* Table */}
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         {isListLoading ? (
           <div className="flex items-center justify-center py-16">
             <div className="flex flex-col items-center gap-3">
               <div className="h-8 w-8 animate-spin rounded-full border-2 border-blue-600 border-t-transparent"></div>
-              <p className="text-sm text-slate-500">Loading damage receiving list...</p>
+              <p className="text-sm text-slate-500">Loading sales returns...</p>
             </div>
           </div>
-        ) : companyReceivings.length === 0 ? (
+        ) : companyReturns.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <p className="text-sm font-semibold text-slate-700">
-              {searchQuery ? 'No damage receiving vouchers found matching your search' : 'No damage receiving vouchers found'}
+              {searchQuery ? 'No sales returns found matching your search' : 'No sales returns found'}
             </p>
             <p className="mt-1 text-xs text-slate-400">
-              {searchQuery ? 'Try adjusting your search terms' : 'Click "New Damage Receiving" to create the first one.'}
+              {searchQuery ? 'Try adjusting your search terms' : 'Click "New Sales Return" to create the first one.'}
             </p>
           </div>
         ) : (
@@ -236,20 +268,33 @@ export const DamageReceivingList: React.FC = () => {
             <table className="w-full text-sm">
               <thead className="border-b border-slate-200 bg-slate-50">
                 <tr>
-                  {['Code', 'Date', 'Customer', 'Salesman', 'Account', 'Total Net Amount', 'Status', 'Actions'].map(h => (
+                  {['Code', 'Date', 'Customer', 'Salesman', 'Account', 'Total Net Amount', 'Type', 'Status', 'Actions'].map(h => (
                     <th key={h} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {companyReceivings.map((ret) => (
+                {companyReturns.map((ret) => (
                   <tr key={ret.id} className="transition-colors hover:bg-slate-50">
-                    <td className="px-4 py-3.5 font-bold text-navy">{ret.damage_receiving_code}</td>
+                    <td className="px-4 py-3.5 font-bold text-navy">{ret.sales_return_code}</td>
                     <td className="px-4 py-3.5 text-slate-500">{ret.date}</td>
                     <td className="px-4 py-3.5 font-semibold text-slate-800">{ret.party_name}</td>
                     <td className="px-4 py-3.5 text-slate-500">{ret.salesman_name}</td>
                     <td className="px-4 py-3.5 text-slate-500">{ret.account_name}</td>
                     <td className="px-4 py-3.5 font-bold text-navy">Rs. {parseFloat(ret.net_amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                    
+                    {/* ✅ Type Column */}
+                    <td className="px-4 py-3.5">
+                      <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wider uppercase transition-all shadow-xs ${
+                        ret.return_type === 'damage'
+                          ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                          : 'bg-blue-50 text-blue-700 border border-blue-200'
+                      }`}>
+                        {ret.return_type || 'normal'}
+                      </span>
+                    </td>
+                    
+                    {/* ✅ Status Column - Pending = Red, Paid = Green */}
                     <td className="px-4 py-3.5">
                       <button
                         onClick={() => handleToggleStatus(ret.id, ret.status)}
@@ -263,10 +308,11 @@ export const DamageReceivingList: React.FC = () => {
                         {ret.status}
                       </button>
                     </td>
+                    
                     <td className="px-4 py-3.5 whitespace-nowrap">
                       <div className="flex gap-2">
                         <button
-                          onClick={() => navigate(`/branch/${branchSlug}/company/${companySlug}/damage-receiving/${ret.id}/edit`)}
+                          onClick={() => navigate(`/branch/${branchSlug}/company/${companySlug}/sales-return/${ret.id}/edit`)}
                           className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:border-slate-400 hover:text-slate-900"
                         >
                           Edit
@@ -289,3 +335,5 @@ export const DamageReceivingList: React.FC = () => {
     </div>
   );
 };
+
+export default SalesReturnList;

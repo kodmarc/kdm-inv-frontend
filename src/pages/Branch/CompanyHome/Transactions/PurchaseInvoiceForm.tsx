@@ -9,17 +9,17 @@ const parseFlexibleDate = (str: string): string => {
   if (!str) return '';
   const trimmed = str.trim();
   const parts = trimmed.split(/[\s\-/.]+/);
-  
+
   if (parts.length === 3) {
     let day = parseInt(parts[0], 10);
     let monthInput = parts[1].toLowerCase();
     let year = parseInt(parts[2], 10);
-    
+
     let month = parseInt(monthInput, 10);
     if (isNaN(month)) {
       const monthsAbbr = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
       const monthsFull = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
-      
+
       let foundIndex = monthsAbbr.findIndex(m => monthInput.startsWith(m));
       if (foundIndex === -1) {
         foundIndex = monthsFull.findIndex(m => monthInput.startsWith(m));
@@ -28,11 +28,11 @@ const parseFlexibleDate = (str: string): string => {
         month = foundIndex + 1;
       }
     }
-    
+
     if (!isNaN(year) && year < 100) {
       year += year < 50 ? 2000 : 1900;
     }
-    
+
     if (!isNaN(day) && !isNaN(month) && !isNaN(year)) {
       if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
         const yyyy = String(year);
@@ -42,7 +42,7 @@ const parseFlexibleDate = (str: string): string => {
       }
     }
   }
-  
+
   const timestamp = Date.parse(trimmed);
   if (!isNaN(timestamp)) {
     const d = new Date(timestamp);
@@ -51,7 +51,7 @@ const parseFlexibleDate = (str: string): string => {
     const dd = String(d.getDate()).padStart(2, '0');
     return `${yyyy}-${mm}-${dd}`;
   }
-  
+
   return trimmed;
 };
 
@@ -140,7 +140,7 @@ export const PurchaseInvoiceForm: React.FC = () => {
         setSTax(parseFloat(inv.s_tax).toFixed(2));
         setFreight(parseFloat(inv.freight).toFixed(2));
         setAdvIncomeTax(parseFloat(inv.adv_income_tax).toFixed(2));
-        
+
         // Snapshots
         setNtn(inv.ntn || '');
         setGstNo(inv.gst_no || '');
@@ -153,7 +153,7 @@ export const PurchaseInvoiceForm: React.FC = () => {
           const matchedItem = items.find(it => it.id === line.item);
           const pack = matchedItem?.pack || 1;
           const totalPcs = parseFloat(line.pcs);
-          
+
           const cartonVal = Math.floor(totalPcs / pack);
 
           return {
@@ -366,7 +366,7 @@ export const PurchaseInvoiceForm: React.FC = () => {
   // Submit Handler
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     // Filter out blank rows
     const validLines = lineItems.filter(li => li.item);
     if (validLines.length === 0) {
@@ -471,11 +471,10 @@ export const PurchaseInvoiceForm: React.FC = () => {
             <button
               type="button"
               onClick={() => setIsStatusDropdownOpen(!isStatusDropdownOpen)}
-              className={`cursor-pointer px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all shadow-xs border flex items-center gap-1.5 ${
-                statusVal === 'paid'
+              className={`cursor-pointer px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all shadow-xs border flex items-center gap-1.5 ${statusVal === 'paid'
                   ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
                   : 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100'
-              }`}
+                }`}
               disabled={isSubmitting}
             >
               Status: {statusVal} <span className="text-[8px]">▼</span>
@@ -645,7 +644,7 @@ export const PurchaseInvoiceForm: React.FC = () => {
                         disabled={isSubmitting}
                       />
                     </td>
-                    
+
                     {/* Carton */}
                     <td className="border border-zinc-200 p-0 text-right">
                       <input
@@ -786,7 +785,7 @@ export const PurchaseInvoiceForm: React.FC = () => {
               <span>Lines Subtotal</span>
               <span className="text-zinc-900">Rs. {subtotalSum.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
             </div>
-            
+
             <div className="flex justify-between items-center text-zinc-600">
               <span>GST / Sales Tax Total</span>
               <span>Rs. {totalSTaxSum.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
@@ -855,3 +854,4 @@ export const PurchaseInvoiceForm: React.FC = () => {
     </div>
   );
 };
+export default PurchaseInvoiceForm;

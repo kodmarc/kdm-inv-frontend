@@ -20,25 +20,29 @@ import { CompanySelection } from './pages/Branch/CompanySelection';
 import { BranchControlPanel } from './pages/Branch/CompanyHome/BranchControlPanel';
 import { CompanyDashboard } from './pages/Branch/CompanyHome/CompanyDashboard';
 import { CompanyHomeLayout } from './pages/Branch/CompanyHome/CompanyHomeLayout';
+
+// Manage Pages
 import { ItemsCatalog } from './pages/Branch/CompanyHome/manage/ItemsCatalog';
 import { ItemCategories } from './pages/Branch/CompanyHome/manage/ItemCategories';
 import { OrderBookers } from './pages/Branch/CompanyHome/manage/OrderBookers';
 import { Salesmen } from './pages/Branch/CompanyHome/manage/Salesmen';
 import { PartiesRegistry } from './pages/Branch/CompanyHome/manage/PartiesRegistry';
 import { AccountsOpening } from './pages/Branch/CompanyHome/manage/AccountsOpening';
-import { SalesInvoiceList } from './pages/Branch/CompanyHome/Transactions/SalesInvoiceList';
-import { SalesInvoiceForm } from './pages/Branch/CompanyHome/Transactions/SalesInvoiceForm';
-import { PurchaseInvoiceList } from './pages/Branch/CompanyHome/Transactions/PurchaseInvoiceList';
-import { PurchaseInvoiceForm } from './pages/Branch/CompanyHome/Transactions/PurchaseInvoiceForm';
-import { SalesReturn } from './pages/Branch/CompanyHome/Transactions/SalesReturn';
-import { PurchaseReturnList } from './pages/Branch/CompanyHome/Transactions/PurchaseReturnList';
-import { PurchaseReturnForm } from './pages/Branch/CompanyHome/Transactions/PurchaseReturnForm';
-import { DamageReturnList } from './pages/Branch/CompanyHome/Transactions/DamageReturnList';
-import { DamageReturnForm } from './pages/Branch/CompanyHome/Transactions/DamageReturnForm';
-import { DamageReceivingList } from './pages/Branch/CompanyHome/Transactions/DamageReceivingList';
-import { DamageReceivingForm } from './pages/Branch/CompanyHome/Transactions/DamageReceivingForm';
-import { LoadForm } from './pages/Branch/CompanyHome/Transactions/LoadForm';
-import { DailySalesReport } from './pages/Branch/CompanyHome/Transactions/DailySalesReport';
+
+// ✅ TRANSACTION IMPORTS
+import SalesInvoiceList from './pages/Branch/CompanyHome/Transactions/SalesInvoiceList';
+import SalesInvoiceForm from './pages/Branch/CompanyHome/Transactions/SalesInvoiceForm';
+import PurchaseInvoiceList from './pages/Branch/CompanyHome/Transactions/PurchaseInvoiceList';
+import PurchaseInvoiceForm from './pages/Branch/CompanyHome/Transactions/PurchaseInvoiceForm';
+import PurchaseReturnList from './pages/Branch/CompanyHome/Transactions/PurchaseReturnList';
+import PurchaseReturnForm from './pages/Branch/CompanyHome/Transactions/PurchaseReturnForm';
+
+// ✅ SALES RETURN (renamed from Damage Receiving)
+import SalesReturnList from './pages/Branch/CompanyHome/Transactions/SalesReturnList';
+import SalesReturnForm from './pages/Branch/CompanyHome/Transactions/SalesReturnForm';
+
+import LoadForm from './pages/Branch/CompanyHome/Transactions/LoadForm';
+import DailySalesReport from './pages/Branch/CompanyHome/Transactions/DailySalesReport';
 
 // KPO Pages
 import { KpoCheckout } from './pages/Kpo/KpoCheckout';
@@ -84,7 +88,7 @@ function App() {
           <Route element={<ProtectedRoute allowedRoles={['BRANCH_ADMIN', 'USER']} />}>
             <Route path="/branch/:branchSlug/companies" element={<CompanySelection />} />
             <Route path="/branch/:branchSlug/control-panel" element={<BranchControlPanel />} />
-            
+
             <Route element={<CompanyHomeLayout />}>
               <Route path="/branch/:branchSlug/company/:companySlug/home" element={<CompanyDashboard />} />
               <Route path="/branch/:branchSlug/company/:companySlug/items" element={<ItemsCatalog />} />
@@ -93,29 +97,27 @@ function App() {
               <Route path="/branch/:branchSlug/company/:companySlug/salesmen" element={<Salesmen />} />
               <Route path="/branch/:branchSlug/company/:companySlug/parties" element={<PartiesRegistry />} />
               <Route path="/branch/:branchSlug/company/:companySlug/accounts" element={<AccountsOpening />} />
-              
+
+              {/* Sales Invoice */}
               <Route path="/branch/:branchSlug/company/:companySlug/sales-invoice" element={<SalesInvoiceList />} />
               <Route path="/branch/:branchSlug/company/:companySlug/sales-invoice/new" element={<SalesInvoiceForm />} />
               <Route path="/branch/:branchSlug/company/:companySlug/sales-invoice/:id/edit" element={<SalesInvoiceForm />} />
-              
+
+              {/* Purchase Invoice */}
               <Route path="/branch/:branchSlug/company/:companySlug/purchase-invoice" element={<PurchaseInvoiceList />} />
               <Route path="/branch/:branchSlug/company/:companySlug/purchase-invoice/new" element={<PurchaseInvoiceForm />} />
               <Route path="/branch/:branchSlug/company/:companySlug/purchase-invoice/:id/edit" element={<PurchaseInvoiceForm />} />
-              
-              <Route path="/branch/:branchSlug/company/:companySlug/sales-return" element={<SalesReturn />} />
-              
+
+              {/* Purchase Return */}
               <Route path="/branch/:branchSlug/company/:companySlug/purchase-return" element={<PurchaseReturnList />} />
               <Route path="/branch/:branchSlug/company/:companySlug/purchase-return/new" element={<PurchaseReturnForm />} />
               <Route path="/branch/:branchSlug/company/:companySlug/purchase-return/:id/edit" element={<PurchaseReturnForm />} />
-              
-              <Route path="/branch/:branchSlug/company/:companySlug/damage-return" element={<DamageReturnList />} />
-              <Route path="/branch/:branchSlug/company/:companySlug/damage-return/new" element={<DamageReturnForm />} />
-              <Route path="/branch/:branchSlug/company/:companySlug/damage-return/:id/edit" element={<DamageReturnForm />} />
-              
-              <Route path="/branch/:branchSlug/company/:companySlug/damage-receiving" element={<DamageReceivingList />} />
-              <Route path="/branch/:branchSlug/company/:companySlug/damage-receiving/new" element={<DamageReceivingForm />} />
-              <Route path="/branch/:branchSlug/company/:companySlug/damage-receiving/:id/edit" element={<DamageReceivingForm />} />
-              
+
+              {/* ✅ Sales Return (renamed from Damage Receiving) */}
+              <Route path="/branch/:branchSlug/company/:companySlug/sales-return" element={<SalesReturnList />} />
+              <Route path="/branch/:branchSlug/company/:companySlug/sales-return/new" element={<SalesReturnForm />} />
+              <Route path="/branch/:branchSlug/company/:companySlug/sales-return/:id/edit" element={<SalesReturnForm />} />
+
               <Route path="/branch/:branchSlug/company/:companySlug/load-form" element={<LoadForm />} />
               <Route path="/branch/:branchSlug/company/:companySlug/daily-sales-report" element={<DailySalesReport />} />
             </Route>

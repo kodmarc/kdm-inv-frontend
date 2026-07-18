@@ -24,8 +24,8 @@ export const PurchaseReturnList: React.FC = () => {
   const [isListLoading, setIsListLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'paid'>('all');
+  const [returnTypeFilter, setReturnTypeFilter] = useState<'all' | 'normal' | 'damage'>('all');
   
-  // Sorting states
   const [sortBy, setSortBy] = useState<string>('created_at');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [localReturns, setLocalReturns] = useState<any[]>([]);
@@ -37,6 +37,18 @@ export const PurchaseReturnList: React.FC = () => {
     { label: 'Net Amount (Low-High)', value: 'net_amount_asc', sortBy: 'net_amount', order: 'asc' },
     { label: 'Supplier (A-Z)', value: 'supplier_name_asc', sortBy: 'supplier_name', order: 'asc' },
     { label: 'Supplier (Z-A)', value: 'supplier_name_desc', sortBy: 'supplier_name', order: 'desc' },
+  ];
+
+  const statusOptions = [
+    { label: 'All', value: 'all' },
+    { label: 'Pending', value: 'pending' },
+    { label: 'Paid', value: 'paid' },
+  ];
+
+  const typeOptions = [
+    { label: 'All Types', value: 'all' },
+    { label: 'Normal', value: 'normal' },
+    { label: 'Damage', value: 'damage' },
   ];
 
   const getCurrentSortValue = () => {
@@ -59,6 +71,10 @@ export const PurchaseReturnList: React.FC = () => {
       filtered = filtered.filter(ret => ret.status === statusFilter);
     }
     
+    if (returnTypeFilter !== 'all') {
+      filtered = filtered.filter(ret => ret.return_type === returnTypeFilter);
+    }
+    
     if (sortBy === 'created_at') {
       filtered.sort((a, b) => {
         const compare = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
@@ -79,7 +95,7 @@ export const PurchaseReturnList: React.FC = () => {
     }
     
     return filtered;
-  }, [sortBy, sortOrder, searchQuery, statusFilter]);
+  }, [sortBy, sortOrder, searchQuery, statusFilter, returnTypeFilter]);
 
   const fetchReturns = async () => {
     setIsListLoading(true);
@@ -131,7 +147,7 @@ export const PurchaseReturnList: React.FC = () => {
 
   return (
     <div className="space-y-5">
-      {/* Header with Title and Add Button on Right */}
+      {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Purchase Returns</h1>
@@ -150,8 +166,9 @@ export const PurchaseReturnList: React.FC = () => {
         </button>
       </div>
 
-      {/* Search Bar + Sort Dropdown + Status Filters */}
+      {/* Filters - All Dropdowns */}
       <div className="flex flex-wrap items-center gap-3">
+        {/* Search */}
         <div className="relative flex-1 min-w-[200px]">
           <input
             type="text"
@@ -181,6 +198,7 @@ export const PurchaseReturnList: React.FC = () => {
           )}
         </div>
 
+        {/* Sort Dropdown */}
         <div className="min-w-[180px]">
           <select
             value={getCurrentSortValue()}
@@ -193,20 +211,30 @@ export const PurchaseReturnList: React.FC = () => {
           </select>
         </div>
 
-        <div className="flex bg-slate-100 p-0.5 rounded-lg border border-slate-200/50">
-          {(['all', 'pending', 'paid'] as const).map((filter) => (
-            <button
-              key={filter}
-              onClick={() => setStatusFilter(filter)}
-              className={`text-xs font-semibold px-3 py-1.5 rounded-md transition-all cursor-pointer capitalize ${
-                statusFilter === filter
-                  ? 'bg-white text-navy shadow-sm'
-                  : 'text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              {filter}
-            </button>
-          ))}
+        {/* Status Dropdown */}
+        <div className="min-w-[140px]">
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as 'all' | 'pending' | 'paid')}
+            className="w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-sm text-slate-900 outline-none transition-colors focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+          >
+            {statusOptions.map(opt => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Type Dropdown */}
+        <div className="min-w-[140px]">
+          <select
+            value={returnTypeFilter}
+            onChange={(e) => setReturnTypeFilter(e.target.value as 'all' | 'normal' | 'damage')}
+            className="w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-sm text-slate-900 outline-none transition-colors focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+          >
+            {typeOptions.map(opt => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
         </div>
       </div>
 
@@ -216,7 +244,7 @@ export const PurchaseReturnList: React.FC = () => {
           <div className="flex items-center justify-center py-16">
             <div className="flex flex-col items-center gap-3">
               <div className="h-8 w-8 animate-spin rounded-full border-2 border-blue-600 border-t-transparent"></div>
-              <p className="text-sm text-slate-500">Loading returns list...</p>
+              <p className="text-sm text-slate-500">Loading purchase returns...</p>
             </div>
           </div>
         ) : companyReturns.length === 0 ? (
@@ -233,7 +261,7 @@ export const PurchaseReturnList: React.FC = () => {
             <table className="w-full text-sm">
               <thead className="border-b border-slate-200 bg-slate-50">
                 <tr>
-                  {['Code', 'Date', 'Party Inv. #', 'Supplier', 'Account', 'Net Amount', 'Status', 'Actions'].map(h => (
+                  {['Code', 'Date', 'Party Inv. #', 'Supplier', 'Account', 'Net Amount', 'Type', 'Status', 'Actions'].map(h => (
                     <th key={h} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">{h}</th>
                   ))}
                 </tr>
@@ -247,6 +275,19 @@ export const PurchaseReturnList: React.FC = () => {
                     <td className="px-4 py-3.5 font-semibold text-slate-800">{ret.supplier_name}</td>
                     <td className="px-4 py-3.5 text-slate-500">{ret.account_name}</td>
                     <td className="px-4 py-3.5 font-bold text-navy">Rs. {parseFloat(ret.net_amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                    
+                    {/* ✅ Type Column */}
+                    <td className="px-4 py-3.5">
+                      <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wider uppercase transition-all shadow-xs ${
+                        ret.return_type === 'damage'
+                          ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                          : 'bg-blue-50 text-blue-700 border border-blue-200'
+                      }`}>
+                        {ret.return_type || 'normal'}
+                      </span>
+                    </td>
+                    
+                    {/* ✅ Status Column - Pending = Red, Paid = Green */}
                     <td className="px-4 py-3.5">
                       <button
                         onClick={() => handleToggleStatus(ret.id, ret.status)}
@@ -260,6 +301,7 @@ export const PurchaseReturnList: React.FC = () => {
                         {ret.status}
                       </button>
                     </td>
+                    
                     <td className="px-4 py-3.5 whitespace-nowrap">
                       <div className="flex gap-2">
                         <button
@@ -286,3 +328,5 @@ export const PurchaseReturnList: React.FC = () => {
     </div>
   );
 };
+
+export default PurchaseReturnList;
