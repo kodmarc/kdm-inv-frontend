@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useOutletContext, useParams, useNavigate } from 'react-router-dom';
+import { useOutletContext, useParams, useNavigate, useLocation } from 'react-router-dom';
 import type { CompanyHomeLayoutContextType } from '../CompanyHomeLayout';
 import api from '../../../../services/api';
 import { SearchableSelect } from '../../../../components/ui';
@@ -59,6 +59,12 @@ const SalesReturnForm: React.FC = () => {
   const { id } = useParams<{ id?: string }>();
   const { branchSlug, companySlug } = useParams<{ branchSlug: string; companySlug: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // Determine mode
+  const isNewMode = location.pathname.includes('/new') || !id;
+  const isEditMode = location.pathname.includes('/edit');
+  const isViewMode = !isNewMode && !isEditMode && !!id;
 
   const {
     items,
@@ -67,7 +73,9 @@ const SalesReturnForm: React.FC = () => {
     accounts,
     activeCompany,
     setSuccess,
-    setError
+    setError,
+    salesReturns,
+    fetchSalesReturns
   } = useOutletContext<CompanyHomeLayoutContextType>();
 
   // Form fields
@@ -107,6 +115,7 @@ const SalesReturnForm: React.FC = () => {
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isStatusDropdownOpen, setIsStatusDropdownOpen] = useState(false);
+  const [isReturnTypeDropdownOpen, setIsReturnTypeDropdownOpen] = useState(false);
 
   const customers = parties.filter(p => p.is_party && p.is_active);
   const activeSalesmen = salesmen.filter(s => s.is_active);
@@ -114,7 +123,7 @@ const SalesReturnForm: React.FC = () => {
 
   // Set default account & salesman
   useEffect(() => {
-    if (!id) {
+    if (isNewMode) {
       if (activeAccounts.length > 0 && !account) {
         setAccount(activeAccounts[0].id);
       }
@@ -122,74 +131,69 @@ const SalesReturnForm: React.FC = () => {
         setSalesman(activeSalesmen[0].id);
       }
     }
-  }, [accounts, salesmen, id]);
+  }, [accounts, salesmen, isNewMode]);
 
   // Load initial empty row
   useEffect(() => {
-    if (!id && lineItems.length === 0) {
+    if (isNewMode && lineItems.length === 0) {
       addEmptyLineItem();
     }
-  }, [id, lineItems]);
+  }, [isNewMode, lineItems]);
 
-  // Load existing sales return
+  // ✅ Load from context
   useEffect(() => {
-    const loadSalesReturn = async () => {
-      if (id) {
-        try {
-          const res = await api.get(`/sales-returns/${id}/`);
-          const ret = res.data;
-          if (ret) {
-            setDate(ret.date);
-            setSalesman(ret.salesman);
-            setParty(ret.party);
-            setAccount(ret.account);
-            setStatusVal(ret.status);
-            setReturnType(ret.return_type || 'normal');
-            setRemarks(ret.remarks || '');
-            setSTax(parseFloat(ret.s_tax).toFixed(2));
-            
-            setNtn(ret.ntn || '');
-            setGstNo(ret.gst_no || '');
-            setCreditLimit(parseFloat(ret.credit_limit).toFixed(2));
-            setBalanceAmount(parseFloat(ret.balance_amount).toFixed(2));
-            setCreditDays(ret.credit_days || 0);
+    if (id && !isNewMode && salesReturns.length > 0) {
+      const ret = salesReturns.find(r => r.id === id);
+      if (ret) {
+        setDate(ret.date);
+        setDateInput(ret.date);
+        setSalesman(ret.salesman || '');
+        setParty(ret.party);
+        setAccount(ret.account);
+        setStatusVal(ret.status);
+        setReturnType(ret.return_type || 'normal');
+        setRemarks(ret.remarks || '');
+        setSTax(parseFloat(ret.s_tax).toFixed(2));
+        
+        setNtn(ret.ntn || '');
+        setGstNo(ret.gst_no || '');
+        setCreditLimit(parseFloat(ret.credit_limit).toFixed(2));
+        setBalanceAmount(parseFloat(ret.balance_amount).toFixed(2));
+        setCreditDays(ret.credit_days || 0);
 
-            const itemsList = ret.line_items.map((line: any) => {
-              const matchedItem = items.find(it => it.id === line.item);
-              const pack = matchedItem?.pack || 1;
-              const totalPcs = parseFloat(line.pcs);
-              const cartonVal = Math.floor(totalPcs / pack);
+        // ❌ REMOVED: setOriginalData - not needed
 
-              return {
-                item: line.item,
-                item_name: line.item_name || matchedItem?.name || '—',
-                item_code: line.item_code || matchedItem?.code || '—',
-                pack: pack,
-                carton: cartonVal,
-                manual_code: line.manual_code || '',
-                issue_units: parseFloat(line.issue_units) || 0,
-                pcs: totalPcs,
-                rate: parseFloat(line.rate).toFixed(2),
-                amount: parseFloat(line.amount).toFixed(2),
-                s_tax_rate: parseFloat(line.s_tax_rate).toFixed(2),
-                s_tax_amount: parseFloat(line.s_tax_amount).toFixed(2),
-                gross_amount: parseFloat(line.gross_amount).toFixed(2),
-                net_amount: parseFloat(line.net_amount).toFixed(2)
-              };
-            });
-            setLineItems(itemsList);
-          }
-        } catch (err) {
-          console.error('Failed to load sales return', err);
-          setError('Failed to load sales return data.');
-        }
+        const itemsList = ret.line_items.map((line: any) => {
+          const matchedItem = items.find(it => it.id === line.item);
+          const pack = matchedItem?.pack || 1;
+          const totalPcs = parseFloat(line.pcs);
+          const cartonVal = Math.floor(totalPcs / pack);
+
+          return {
+            item: line.item,
+            item_name: line.item_name || matchedItem?.name || '—',
+            item_code: line.item_code || matchedItem?.code || '—',
+            pack: pack,
+            carton: cartonVal,
+            manual_code: line.manual_code || '',
+            issue_units: parseFloat(line.issue_units) || 0,
+            pcs: totalPcs,
+            rate: parseFloat(line.rate).toFixed(2),
+            amount: parseFloat(line.amount).toFixed(2),
+            s_tax_rate: parseFloat(line.s_tax_rate).toFixed(2),
+            s_tax_amount: parseFloat(line.s_tax_amount).toFixed(2),
+            gross_amount: parseFloat(line.gross_amount).toFixed(2),
+            net_amount: parseFloat(line.net_amount).toFixed(2)
+          };
+        });
+        setLineItems(itemsList);
       }
-    };
-    loadSalesReturn();
-  }, [id, items]);
+    }
+  }, [id, isNewMode, items, salesReturns]);
 
   // Handle party change
   const handlePartyChange = (partyId: string) => {
+    if (isViewMode) return;
     setParty(partyId);
     const selected = parties.find(p => p.id === partyId);
     if (selected) {
@@ -203,6 +207,7 @@ const SalesReturnForm: React.FC = () => {
 
   // Add empty line item
   const addEmptyLineItem = () => {
+    if (isViewMode) return;
     setLineItems(prev => [
       ...prev,
       {
@@ -226,6 +231,7 @@ const SalesReturnForm: React.FC = () => {
 
   // Remove line item
   const removeLineItem = (index: number) => {
+    if (isViewMode) return;
     if (lineItems.length <= 1) {
       setError('Return must have at least one row.');
       setTimeout(() => setError(''), 3000);
@@ -236,6 +242,7 @@ const SalesReturnForm: React.FC = () => {
 
   // Handle row item change
   const handleRowItemChange = (index: number, itemId: string) => {
+    if (isViewMode) return;
     if (!itemId) {
       const updated = [...lineItems];
       updated[index] = {
@@ -261,7 +268,6 @@ const SalesReturnForm: React.FC = () => {
     const selected = items.find(it => it.id === itemId);
     if (!selected) return;
 
-    // Check duplicate
     if (lineItems.some((li, idx) => li.item === itemId && idx !== index)) {
       setError('Item is already added to another row.');
       setTimeout(() => setError(''), 3000);
@@ -315,6 +321,7 @@ const SalesReturnForm: React.FC = () => {
 
   // Update line item
   const updateLineItem = (index: number, key: string, value: any) => {
+    if (isViewMode) return;
     const updated = [...lineItems];
     const item = { ...updated[index] };
 
@@ -360,9 +367,24 @@ const SalesReturnForm: React.FC = () => {
     setSTax(totalSTaxSum.toFixed(2));
   }, [lineItems]);
 
-  // Submit Handler
+  // ✅ FIXED: Status change ONLY updates local state - NO API CALL!
+  const handleStatusChange = (newStatus: 'pending' | 'paid') => {
+    if (isViewMode) return;
+    setStatusVal(newStatus);
+    setIsStatusDropdownOpen(false);
+  };
+
+  // ✅ FIXED: Return type change ONLY updates local state - NO API CALL!
+  const handleReturnTypeChange = (newType: 'normal' | 'damage') => {
+    if (isViewMode) return;
+    setReturnType(newType);
+    setIsReturnTypeDropdownOpen(false);
+  };
+
+  // ✅ Submit Handler - ALL CHANGES SAVED TOGETHER
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isViewMode) return;
     
     const validLines = lineItems.filter(li => li.item);
     if (validLines.length === 0) {
@@ -385,7 +407,8 @@ const SalesReturnForm: React.FC = () => {
       return;
     }
 
-    const payload = {
+    // ✅ Build payload with ALL changes
+    const payload: any = {
       date: finalDate,
       salesman: salesman || null,
       party,
@@ -416,13 +439,19 @@ const SalesReturnForm: React.FC = () => {
     };
 
     try {
-      if (id) {
+      if (isEditMode) {
         await api.put(`/sales-returns/${id}/`, payload);
         setSuccess('Sales return updated successfully.');
       } else {
         await api.post('/sales-returns/', payload);
         setSuccess('Sales return saved successfully.');
       }
+      
+      // Refresh the list
+      if (fetchSalesReturns) {
+        fetchSalesReturns();
+      }
+      
       setTimeout(() => setSuccess(''), 3000);
       navigate(`/branch/${branchSlug}/company/${companySlug}/sales-return`);
     } catch (err: any) {
@@ -448,79 +477,79 @@ const SalesReturnForm: React.FC = () => {
     }
   };
 
+  // Check if field should be disabled
+  const isDisabled = isViewMode || isSubmitting;
+
   return (
     <div className="animate-fade-in bg-white p-6 w-full mx-auto">
       {/* Top Header Row */}
       <div className="mb-6 pb-4 border-b border-zinc-100 flex items-center justify-between">
         <div>
           <h3 className="text-lg font-bold text-navy tracking-tight">
-            {id ? 'Modify Sales Return' : 'New Sales Return'}
+            {isViewMode ? 'View Sales Return' : isEditMode ? 'Modify Sales Return' : 'New Sales Return'}
           </h3>
           <p className="text-xs text-muted mt-1 font-medium">
-            Record product returns from customers and post ledger adjustments.
+            {isViewMode ? 'View product return details.' : 'Record product returns from customers and post ledger adjustments.'}
           </p>
         </div>
 
         <div className="flex items-center gap-3">
-          {/* Return Type Toggle */}
-          <div className="flex items-center gap-2">
-            <label className="text-[10px] font-bold text-zinc-500 uppercase">Return Type</label>
-            <div className="flex bg-slate-100 p-0.5 rounded-lg border border-slate-200/50">
-              <button
-                type="button"
-                onClick={() => setReturnType('normal')}
-                className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${
-                  returnType === 'normal'
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'text-slate-500 hover:text-slate-700'
-                }`}
-              >
-                Normal
-              </button>
-              <button
-                type="button"
-                onClick={() => setReturnType('damage')}
-                className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${
-                  returnType === 'damage'
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'text-slate-500 hover:text-slate-700'
-                }`}
-              >
-                Damage
-              </button>
-            </div>
-          </div>
-
-          {/* Status Toggle Dropdown Button */}
+          {/* ✅ Return Type Dropdown - LOCAL STATE ONLY */}
           <div className="relative">
             <button
               type="button"
-              onClick={() => setIsStatusDropdownOpen(!isStatusDropdownOpen)}
+              onClick={() => !isViewMode && !isSubmitting && setIsReturnTypeDropdownOpen(!isReturnTypeDropdownOpen)}
+              className={`cursor-pointer px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all shadow-xs border flex items-center gap-1.5 ${
+                returnType === 'damage'
+                  ? 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'
+                  : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'
+              } ${isViewMode ? 'opacity-60 cursor-default' : ''}`}
+              disabled={isViewMode || isSubmitting}
+            >
+              Type: {returnType} {!isViewMode && <span className="text-[8px]">▼</span>}
+            </button>
+            {isReturnTypeDropdownOpen && !isViewMode && (
+              <div className="absolute right-0 top-[100%] mt-1 bg-white border border-zinc-200 rounded-xl shadow-lg z-50 text-xs font-bold divide-y divide-zinc-50 w-28 overflow-hidden">
+                <div
+                  onClick={() => handleReturnTypeChange('normal')}
+                  className="px-4 py-2 hover:bg-blue-50 text-blue-600 cursor-pointer transition-colors"
+                >
+                  NORMAL
+                </div>
+                <div
+                  onClick={() => handleReturnTypeChange('damage')}
+                  className="px-4 py-2 hover:bg-amber-50 text-amber-600 cursor-pointer transition-colors"
+                >
+                  DAMAGE
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* ✅ Status Dropdown - LOCAL STATE ONLY */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => !isViewMode && !isSubmitting && setIsStatusDropdownOpen(!isStatusDropdownOpen)}
               className={`cursor-pointer px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all shadow-xs border flex items-center gap-1.5 ${
                 statusVal === 'paid'
                   ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
                   : 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100'
-              }`}
-              disabled={isSubmitting}
+              } ${isViewMode ? 'opacity-60 cursor-default' : ''}`}
+              disabled={isViewMode || isSubmitting}
             >
-              Status: {statusVal} <span className="text-[8px]">▼</span>
+              Status: {statusVal} {!isViewMode && <span className="text-[8px]">▼</span>}
             </button>
-            {isStatusDropdownOpen && (
+            {isStatusDropdownOpen && !isViewMode && (
               <div className="absolute right-0 top-[100%] mt-1 bg-white border border-zinc-200 rounded-xl shadow-lg z-50 text-xs font-bold divide-y divide-zinc-50 w-28 overflow-hidden">
                 <div
-                  onClick={() => {
-                    setStatusVal('pending');
-                    setIsStatusDropdownOpen(false);
-                  }}
+                  onClick={() => handleStatusChange('pending')}
                   className="px-4 py-2 hover:bg-rose-50 text-rose-600 cursor-pointer transition-colors"
                 >
                   PENDING
                 </div>
                 <div
-                  onClick={() => {
-                    setStatusVal('paid');
-                    setIsStatusDropdownOpen(false);
-                  }}
+                  onClick={() => handleStatusChange('paid')}
                   className="px-4 py-2 hover:bg-emerald-50 text-emerald-600 cursor-pointer transition-colors"
                 >
                   PAID
@@ -535,12 +564,23 @@ const SalesReturnForm: React.FC = () => {
             className="cursor-pointer bg-zinc-50 border border-zinc-200 hover:bg-zinc-100 text-zinc-600 text-xs font-bold px-4 py-2 rounded-xl transition-all"
             disabled={isSubmitting}
           >
-            Cancel
+            {isViewMode ? 'Back' : 'Cancel'}
           </button>
+
+          {!isViewMode && (
+            <button
+              type="submit"
+              form="sales-return-form"
+              className="cursor-pointer bg-primary hover:bg-primary-hover text-white text-xs font-bold px-6 py-2.5 rounded-xl transition-all shadow-xs"
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? 'Saving...' : isEditMode ? 'Update Changes' : 'Save'}
+            </button>
+          )}
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form id="sales-return-form" onSubmit={handleSubmit} className="space-y-6">
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
           {/* Date */}
           <div className="flex flex-col gap-1.5">
@@ -550,9 +590,9 @@ const SalesReturnForm: React.FC = () => {
               required
               className="text-xs border border-zinc-200 rounded-xl px-3 py-2.5 bg-white font-bold outline-hidden focus:outline-hidden"
               value={dateInput}
-              onChange={(e) => setDateInput(e.target.value)}
+              onChange={(e) => !isViewMode && setDateInput(e.target.value)}
               onBlur={handleDateBlur}
-              disabled={isSubmitting}
+              disabled={isDisabled}
             />
             {formErrors.date && <span className="text-[10px] text-danger font-semibold mt-1">{formErrors.date}</span>}
           </div>
@@ -565,7 +605,7 @@ const SalesReturnForm: React.FC = () => {
               options={customers.map(c => ({ value: c.id, label: `${c.name} (${c.contact_no})` }))}
               value={party}
               onChange={(val) => handlePartyChange(val)}
-              disabled={isSubmitting || !!id}
+              disabled={isDisabled || !!id}
               required
               error={formErrors.party}
             />
@@ -579,7 +619,7 @@ const SalesReturnForm: React.FC = () => {
               options={activeSalesmen.map(s => ({ value: s.id, label: `${s.name} (${s.contact_no})` }))}
               value={salesman}
               onChange={(val) => setSalesman(val)}
-              disabled={isSubmitting}
+              disabled={isDisabled}
               required
               error={formErrors.salesman}
             />
@@ -593,7 +633,7 @@ const SalesReturnForm: React.FC = () => {
               options={activeAccounts.map(a => ({ value: a.id, label: `${a.name} (${a.code})` }))}
               value={account}
               onChange={(val) => setAccount(val)}
-              disabled={isSubmitting}
+              disabled={isDisabled}
               required
               error={formErrors.account}
             />
@@ -606,8 +646,8 @@ const SalesReturnForm: React.FC = () => {
               type="text"
               className="text-xs border border-zinc-200 rounded-xl px-3 py-2.5 bg-white font-bold outline-hidden focus:outline-hidden"
               value={remarks}
-              onChange={(e) => setRemarks(e.target.value)}
-              disabled={isSubmitting}
+              onChange={(e) => !isViewMode && setRemarks(e.target.value)}
+              disabled={isDisabled}
             />
           </div>
 
@@ -669,6 +709,7 @@ const SalesReturnForm: React.FC = () => {
             </thead>
             <tbody className="text-xs font-medium text-zinc-700 bg-white">
               {lineItems.map((li, index) => {
+                const isRowDisabled = isDisabled || !li.item;
                 return (
                   <tr key={index} className="hover:bg-zinc-50/20 transition-colors">
                     <td className="border border-zinc-200 p-0">
@@ -678,7 +719,7 @@ const SalesReturnForm: React.FC = () => {
                         className="w-full h-full bg-transparent border-0 focus:outline-hidden focus:ring-0 px-3 py-2 text-xs font-bold"
                         value={li.manual_code}
                         onChange={(e) => updateLineItem(index, 'manual_code', e.target.value)}
-                        disabled={isSubmitting}
+                        disabled={isDisabled}
                       />
                     </td>
                     
@@ -686,11 +727,11 @@ const SalesReturnForm: React.FC = () => {
                       <SearchableSelect
                         compact
                         borderless
-                        placeholder="-- Select Item --"
+                        placeholder={isViewMode ? li.item_name || '--' : "-- Select Item --"}
                         options={items.filter(it => it.is_active).map(it => ({ value: it.id, label: `${it.name} (${it.code})` }))}
                         value={li.item}
                         onChange={(val) => handleRowItemChange(index, val)}
-                        disabled={isSubmitting}
+                        disabled={isDisabled}
                       />
                     </td>
 
@@ -707,7 +748,7 @@ const SalesReturnForm: React.FC = () => {
                         value={li.carton}
                         onChange={(e) => updateLineItem(index, 'carton', e.target.value)}
                         onFocus={(e) => e.target.select()}
-                        disabled={isSubmitting || !li.item}
+                        disabled={isRowDisabled}
                       />
                     </td>
 
@@ -720,7 +761,7 @@ const SalesReturnForm: React.FC = () => {
                         value={li.pcs}
                         onChange={(e) => updateLineItem(index, 'pcs', e.target.value)}
                         onFocus={(e) => e.target.select()}
-                        disabled={isSubmitting || !li.item}
+                        disabled={isRowDisabled}
                       />
                     </td>
 
@@ -733,7 +774,7 @@ const SalesReturnForm: React.FC = () => {
                         value={li.issue_units}
                         onChange={(e) => updateLineItem(index, 'issue_units', e.target.value)}
                         onFocus={(e) => e.target.select()}
-                        disabled={isSubmitting || !li.item}
+                        disabled={isRowDisabled}
                       />
                     </td>
 
@@ -746,7 +787,7 @@ const SalesReturnForm: React.FC = () => {
                         value={li.rate}
                         onChange={(e) => updateLineItem(index, 'rate', e.target.value)}
                         onFocus={(e) => e.target.select()}
-                        disabled={isSubmitting || !li.item}
+                        disabled={isRowDisabled}
                       />
                     </td>
 
@@ -759,7 +800,7 @@ const SalesReturnForm: React.FC = () => {
                         value={li.s_tax_rate}
                         onChange={(e) => updateLineItem(index, 's_tax_rate', e.target.value)}
                         onFocus={(e) => e.target.select()}
-                        disabled={isSubmitting || !li.item}
+                        disabled={isRowDisabled}
                       />
                     </td>
 
@@ -776,26 +817,31 @@ const SalesReturnForm: React.FC = () => {
                     </td>
 
                     <td className="border border-zinc-200 px-3 py-2 text-center">
-                      <div className="flex items-center justify-center gap-1.5">
-                        <button
-                          type="button"
-                          onClick={addEmptyLineItem}
-                          className="cursor-pointer text-emerald-600 hover:text-emerald-800 text-sm font-bold w-7 h-7 rounded hover:bg-emerald-50 transition-colors flex items-center justify-center border border-emerald-100"
-                          title="Add new line"
-                          disabled={isSubmitting}
-                        >
-                          ＋
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => removeLineItem(index)}
-                          className="cursor-pointer text-danger hover:text-red-700 text-sm font-bold w-7 h-7 rounded hover:bg-red-50 transition-colors flex items-center justify-center border border-red-100"
-                          title="Delete line"
-                          disabled={isSubmitting}
-                        >
-                          ✕
-                        </button>
-                      </div>
+                      {!isViewMode && (
+                        <div className="flex items-center justify-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={addEmptyLineItem}
+                            className="cursor-pointer text-emerald-600 hover:text-emerald-800 text-sm font-bold w-7 h-7 rounded hover:bg-emerald-50 transition-colors flex items-center justify-center border border-emerald-100"
+                            title="Add new line"
+                            disabled={isDisabled}
+                          >
+                            ＋
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => removeLineItem(index)}
+                            className="cursor-pointer text-danger hover:text-red-700 text-sm font-bold w-7 h-7 rounded hover:bg-red-50 transition-colors flex items-center justify-center border border-red-100"
+                            title="Delete line"
+                            disabled={isDisabled}
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      )}
+                      {isViewMode && (
+                        <span className="text-xs text-slate-400">View only</span>
+                      )}
                     </td>
                   </tr>
                 );
@@ -803,16 +849,18 @@ const SalesReturnForm: React.FC = () => {
             </tbody>
           </table>
 
-          <div className="pt-3 flex justify-start">
-            <button
-              type="button"
-              onClick={addEmptyLineItem}
-              className="cursor-pointer text-xs font-semibold px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-700 transition-all font-bold"
-              disabled={isSubmitting}
-            >
-              + Add a line
-            </button>
-          </div>
+          {!isViewMode && (
+            <div className="pt-3 flex justify-start">
+              <button
+                type="button"
+                onClick={addEmptyLineItem}
+                className="cursor-pointer text-xs font-semibold px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-700 transition-all font-bold"
+                disabled={isDisabled}
+              >
+                + Add a line
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Totals Summary */}
@@ -832,24 +880,26 @@ const SalesReturnForm: React.FC = () => {
           </div>
         </div>
 
-        {/* Submit Actions */}
-        <div className="pt-4 border-t border-zinc-100 flex items-center justify-end gap-3">
-          <button
-            type="button"
-            onClick={() => navigate(`/branch/${branchSlug}/company/${companySlug}/sales-return`)}
-            className="cursor-pointer bg-zinc-100 hover:bg-zinc-200 text-zinc-700 text-xs font-bold px-5 py-2.5 rounded-xl transition-all"
-            disabled={isSubmitting}
-          >
-            Cancel
-          </button>
-          <button
-            type="submit"
-            className="cursor-pointer bg-primary hover:bg-primary-hover text-white text-xs font-bold px-6 py-2.5 rounded-xl transition-all shadow-xs"
-            disabled={isSubmitting}
-          >
-            {isSubmitting ? 'Saving...' : 'Save Sales Return'}
-          </button>
-        </div>
+        {/* Submit Actions - Only show in Edit/New mode */}
+        {!isViewMode && (
+          <div className="pt-4 border-t border-zinc-100 flex items-center justify-end gap-3">
+            <button
+              type="button"
+              onClick={() => navigate(`/branch/${branchSlug}/company/${companySlug}/sales-return`)}
+              className="cursor-pointer bg-zinc-100 hover:bg-zinc-200 text-zinc-700 text-xs font-bold px-5 py-2.5 rounded-xl transition-all"
+              disabled={isSubmitting}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="cursor-pointer bg-primary hover:bg-primary-hover text-white text-xs font-bold px-6 py-2.5 rounded-xl transition-all shadow-xs"
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? 'Saving...' : isEditMode ? 'Update Changes' : 'Save Return'}
+            </button>
+          </div>
+        )}
       </form>
     </div>
   );

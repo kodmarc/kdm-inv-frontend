@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useOutletContext } from 'react-router-dom';
 import { Badge } from '../../../../components/ui';
-import api from '../../../../services/api';
+import type { CompanyHomeLayoutContextType } from '../CompanyHomeLayout';
 
 type SortOption = {
   label: string;
@@ -19,11 +20,17 @@ function useDebounce<T>(value: T, delay: number): T {
 }
 
 export const ItemsCatalog: React.FC = () => {
+  // ✅ Context se data lein with default values
+  const {
+    items: contextItems = [],
+    categories: contextCategories = [],
+    companies: contextCompanies = [],
+    fetchItems,
+    isLoading: contextLoading = false
+  } = useOutletContext<CompanyHomeLayoutContextType>() || {};
+
   const [items, setItems] = useState<any[]>([]);
-  const [categories, setCategories] = useState<any[]>([]);
-  const [companies, setCompanies] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
   
   const [sortBy, setSortBy] = useState<string>('name');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
@@ -51,117 +58,104 @@ export const ItemsCatalog: React.FC = () => {
     return found ? found.value : 'name_asc';
   };
 
-  const sortItemsLocally = useCallback((data: any[]) => {
-    const sorted = [...data];
+  // ✅ Local filtering and sorting - NO API CALLS!
+  const filterAndSortItems = useCallback(() => {
+    // ✅ Handle case when contextItems is undefined or empty
+    if (!contextItems || contextItems.length === 0) {
+      return [];
+    }
+
+    let filtered = [...contextItems];
     
+    // Search filter
+    if (debouncedSearch.trim()) {
+      const q = debouncedSearch.toLowerCase().trim();
+      filtered = filtered.filter(item =>
+        item.name?.toLowerCase().includes(q) ||
+        item.code?.toLowerCase().includes(q) ||
+        item.sku?.toLowerCase().includes(q)
+      );
+    }
+    
+    // Category filter
+    if (selectedCategory) {
+      filtered = filtered.filter(item => item.category === selectedCategory);
+    }
+    
+    // Company filter
+    if (selectedCompany) {
+      filtered = filtered.filter(item => item.company === selectedCompany);
+    }
+    
+    // ✅ Sort with proper null/undefined handling
     if (sortBy === 'name') {
-      sorted.sort((a, b) => {
+      filtered.sort((a, b) => {
         const aVal = a.name || '';
         const bVal = b.name || '';
         const compare = aVal.localeCompare(bVal);
         return sortOrder === 'asc' ? compare : -compare;
       });
     } else if (sortBy === 'sales_rate') {
-      sorted.sort((a, b) => {
-        const aVal = a.sales_rate !== null && a.sales_rate !== '' && a.sales_rate !== undefined 
-          ? parseFloat(a.sales_rate) 
-          : (sortOrder === 'desc' ? -Infinity : Infinity);
-        const bVal = b.sales_rate !== null && b.sales_rate !== '' && b.sales_rate !== undefined 
-          ? parseFloat(b.sales_rate) 
-          : (sortOrder === 'desc' ? -Infinity : Infinity);
-        const compare = aVal - bVal;
-        return sortOrder === 'asc' ? compare : -compare;
+      filtered.sort((a, b) => {
+        // ✅ Safe parsing with fallback to 0
+        const aVal = parseFloat(a.sales_rate ?? '0') || 0;
+        const bVal = parseFloat(b.sales_rate ?? '0') || 0;
+        return sortOrder === 'asc' ? aVal - bVal : bVal - aVal;
       });
     } else if (sortBy === 'purchase_rate') {
-      sorted.sort((a, b) => {
-        const aVal = a.purchase_rate !== null && a.purchase_rate !== '' && a.purchase_rate !== undefined 
-          ? parseFloat(a.purchase_rate) 
-          : (sortOrder === 'desc' ? -Infinity : Infinity);
-        const bVal = b.purchase_rate !== null && b.purchase_rate !== '' && b.purchase_rate !== undefined 
-          ? parseFloat(b.purchase_rate) 
-          : (sortOrder === 'desc' ? -Infinity : Infinity);
-        const compare = aVal - bVal;
-        return sortOrder === 'asc' ? compare : -compare;
+      filtered.sort((a, b) => {
+        // ✅ Safe parsing with fallback to 0 using nullish coalescing
+        const aVal = parseFloat(a.purchase_rate ?? '0') || 0;
+        const bVal = parseFloat(b.purchase_rate ?? '0') || 0;
+        return sortOrder === 'asc' ? aVal - bVal : bVal - aVal;
       });
     } else if (sortBy === 'current_stock') {
-      sorted.sort((a, b) => {
-        const aVal = a.current_stock !== null && a.current_stock !== undefined 
-          ? parseFloat(a.current_stock) 
-          : (sortOrder === 'desc' ? -Infinity : Infinity);
-        const bVal = b.current_stock !== null && b.current_stock !== undefined 
-          ? parseFloat(b.current_stock) 
-          : (sortOrder === 'desc' ? -Infinity : Infinity);
-        const compare = aVal - bVal;
-        return sortOrder === 'asc' ? compare : -compare;
+      filtered.sort((a, b) => {
+        // ✅ Safe parsing with fallback to 0
+        const aVal = parseFloat(a.current_stock ?? '0') || 0;
+        const bVal = parseFloat(b.current_stock ?? '0') || 0;
+        return sortOrder === 'asc' ? aVal - bVal : bVal - aVal;
       });
     } else if (sortBy === 'created_at') {
-      sorted.sort((a, b) => {
-        const aVal = new Date(a.created_at).getTime();
-        const bVal = new Date(b.created_at).getTime();
-        const compare = aVal - bVal;
-        return sortOrder === 'asc' ? compare : -compare;
+      filtered.sort((a, b) => {
+        // ✅ Safe date parsing with fallback
+        const aVal = a.created_at ? new Date(a.created_at).getTime() : 0;
+        const bVal = b.created_at ? new Date(b.created_at).getTime() : 0;
+        return sortOrder === 'asc' ? aVal - bVal : bVal - aVal;
       });
     }
-    return sorted;
-  }, [sortBy, sortOrder]);
+    
+    return filtered;
+  }, [contextItems, debouncedSearch, selectedCategory, selectedCompany, sortBy, sortOrder]);
 
-  const fetchItems = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError('');
-      
-      let url = `/items/`;
-      
-      const params = new URLSearchParams();
-      
-      if (selectedCategory) {
-        params.append('category', selectedCategory);
-      }
-      if (selectedCompany) {
-        params.append('company', selectedCompany);
-      }
-      if (debouncedSearch.trim()) {
-        params.append('search', debouncedSearch.trim());
-      }
-      
-      const queryString = params.toString();
-      if (queryString) {
-        url += `?${queryString}`;
-      }
-      
-      const response = await api.get(url);
-      const sortedData = sortItemsLocally(response.data);
-      setItems(sortedData);
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to fetch items.');
-    } finally {
+  // ✅ Update items when context data or filters change
+  useEffect(() => {
+    if (contextItems && contextItems.length > 0) {
+      setItems(filterAndSortItems());
       setLoading(false);
+    } else if (!contextLoading && fetchItems) {
+      fetchItems().then(() => {
+        setLoading(false);
+      }).catch(() => {
+        setLoading(false);
+      });
+    } else {
+      setLoading(true);
     }
-  }, [selectedCategory, selectedCompany, debouncedSearch, sortItemsLocally]);
+  }, [contextItems, filterAndSortItems, fetchItems, contextLoading]);
 
-  const fetchFilters = useCallback(async () => {
-    try {
-      const [categoriesRes, companiesRes] = await Promise.all([
-        api.get('/item-categories/'),
-        api.get('/companies/')
-      ]);
-      setCategories(categoriesRes.data || []);
-      setCompanies(companiesRes.data || []);
-    } catch {
-      // Silent fail
+  // ✅ Re-filter when filters change (NO API CALL!)
+  useEffect(() => {
+    if (contextItems && contextItems.length > 0) {
+      setItems(filterAndSortItems());
     }
-  }, []);
-
-  useEffect(() => { fetchFilters(); }, [fetchFilters]);
-  useEffect(() => { fetchItems(); }, [fetchItems]);
+  }, [filterAndSortItems, contextItems]);
 
   const handleSortChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const selected = sortOptions.find(opt => opt.value === e.target.value);
     if (selected) {
       setSortBy(selected.sortBy);
       setSortOrder(selected.order);
-      const sortedData = sortItemsLocally(items);
-      setItems(sortedData);
     }
   };
 
@@ -171,7 +165,6 @@ export const ItemsCatalog: React.FC = () => {
     setSearchQuery('');
     setSelectedCategory('');
     setSelectedCompany('');
-    setTimeout(fetchItems, 0);
   };
 
   const clearSearch = () => {
@@ -230,7 +223,7 @@ export const ItemsCatalog: React.FC = () => {
           </select>
         </div>
 
-        {categories.length > 0 && (
+        {contextCategories && contextCategories.length > 0 && (
           <div className="min-w-[150px]">
             <select
               value={selectedCategory}
@@ -238,14 +231,14 @@ export const ItemsCatalog: React.FC = () => {
               className="w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-sm text-slate-900 outline-none transition-colors focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
             >
               <option value="">All Categories</option>
-              {categories.map((cat) => (
+              {contextCategories.map((cat) => (
                 <option key={cat.id} value={cat.id}>{cat.name}</option>
               ))}
             </select>
           </div>
         )}
 
-        {companies.length > 0 && (
+        {contextCompanies && contextCompanies.length > 0 && (
           <div className="min-w-[150px]">
             <select
               value={selectedCompany}
@@ -253,7 +246,7 @@ export const ItemsCatalog: React.FC = () => {
               className="w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-sm text-slate-900 outline-none transition-colors focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
             >
               <option value="">All Companies</option>
-              {companies.map((comp) => (
+              {contextCompanies.map((comp) => (
                 <option key={comp.id} value={comp.id}>{comp.name}</option>
               ))}
             </select>
@@ -275,22 +268,6 @@ export const ItemsCatalog: React.FC = () => {
               <div className="h-8 w-8 animate-spin rounded-full border-2 border-blue-600 border-t-transparent"></div>
               <p className="text-sm text-slate-500">Loading items...</p>
             </div>
-          </div>
-        ) : error ? (
-          <div className="flex flex-col items-center justify-center py-16 text-center">
-            <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-red-50">
-              <svg className="h-6 w-6 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-              </svg>
-            </div>
-            <p className="text-sm font-semibold text-slate-700">Error loading items</p>
-            <p className="mt-1 text-xs text-slate-400">{error}</p>
-            <button
-              onClick={fetchItems}
-              className="mt-4 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-            >
-              Try Again
-            </button>
           </div>
         ) : items.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">

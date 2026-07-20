@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useOutletContext, useNavigate, useParams } from 'react-router-dom';
 import type { CompanyHomeLayoutContextType } from '../CompanyHomeLayout';
 import api from '../../../../services/api';
@@ -14,23 +14,29 @@ export const SalesReturnList: React.FC = () => {
   const navigate = useNavigate();
   const { branchSlug, companySlug } = useParams<{ branchSlug: string; companySlug: string }>();
 
+  // ✅ Only import what's actually used
   const {
     activeCompany,
-    setSuccess,
-    setError
+    accounts,
+    salesReturns,
+    fetchSalesReturns,
+    isLoading: contextLoading
   } = useOutletContext<CompanyHomeLayoutContextType>();
 
-  const [returns, setReturns] = useState<any[]>([]);
-  const [isListLoading, setIsListLoading] = useState(false);
+  // ❌ REMOVED: setSuccess, setError (not used)
+
   const [searchQuery, setSearchQuery] = useState('');
+  const [accountFilter, setAccountFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'paid'>('all');
   const [returnTypeFilter, setReturnTypeFilter] = useState<'all' | 'normal' | 'damage'>('all');
   
   const [sortBy, setSortBy] = useState<string>('created_at');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [localReturns, setLocalReturns] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   const sortOptions: SortOption[] = [
+    { label: 'None', value: 'none', sortBy: 'none', order: 'desc' },
     { label: 'Newest First', value: 'created_at_desc', sortBy: 'created_at', order: 'desc' },
     { label: 'Oldest First', value: 'created_at_asc', sortBy: 'created_at', order: 'asc' },
     { label: 'Net Amount (High-Low)', value: 'net_amount_desc', sortBy: 'net_amount', order: 'desc' },
@@ -41,8 +47,16 @@ export const SalesReturnList: React.FC = () => {
     { label: 'Salesman (Z-A)', value: 'salesman_name_desc', sortBy: 'salesman_name', order: 'desc' },
   ];
 
+  const accountOptions = useMemo(() => {
+    const opts = [{ label: 'All Accounts', value: 'all' }];
+    accounts.forEach(acc => {
+      opts.push({ label: `${acc.name} (${acc.code})`, value: acc.id });
+    });
+    return opts;
+  }, [accounts]);
+
   const statusOptions = [
-    { label: 'All', value: 'all' },
+    { label: 'All Status', value: 'all' },
     { label: 'Pending', value: 'pending' },
     { label: 'Paid', value: 'paid' },
   ];
@@ -58,6 +72,7 @@ export const SalesReturnList: React.FC = () => {
     return found ? found.value : 'created_at_desc';
   };
 
+  // ✅ Optimized sorting and filtering
   const sortAndFilterReturns = useCallback((data: any[]) => {
     let filtered = [...data];
     
@@ -69,6 +84,10 @@ export const SalesReturnList: React.FC = () => {
       );
     }
     
+    if (accountFilter !== 'all') {
+      filtered = filtered.filter(ret => ret.account === accountFilter);
+    }
+    
     if (statusFilter !== 'all') {
       filtered = filtered.filter(ret => ret.status === statusFilter);
     }
@@ -77,52 +96,55 @@ export const SalesReturnList: React.FC = () => {
       filtered = filtered.filter(ret => ret.return_type === returnTypeFilter);
     }
     
-    if (sortBy === 'created_at') {
-      filtered.sort((a, b) => {
-        const compare = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
-        return sortOrder === 'asc' ? compare : -compare;
-      });
-    } else if (sortBy === 'net_amount') {
-      filtered.sort((a, b) => {
-        const aVal = parseFloat(a.net_amount || '0');
-        const bVal = parseFloat(b.net_amount || '0');
-        const compare = aVal - bVal;
-        return sortOrder === 'asc' ? compare : -compare;
-      });
-    } else if (sortBy === 'party_name') {
-      filtered.sort((a, b) => {
-        const compare = (a.party_name || '').localeCompare(b.party_name || '');
-        return sortOrder === 'asc' ? compare : -compare;
-      });
-    } else if (sortBy === 'salesman_name') {
-      filtered.sort((a, b) => {
-        const compare = (a.salesman_name || '').localeCompare(b.salesman_name || '');
-        return sortOrder === 'asc' ? compare : -compare;
-      });
+    if (sortBy !== 'none') {
+      if (sortBy === 'created_at') {
+        filtered.sort((a, b) => {
+          const compare = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+          return sortOrder === 'asc' ? compare : -compare;
+        });
+      } else if (sortBy === 'net_amount') {
+        filtered.sort((a, b) => {
+          const aVal = parseFloat(a.net_amount || '0');
+          const bVal = parseFloat(b.net_amount || '0');
+          const compare = aVal - bVal;
+          return sortOrder === 'asc' ? compare : -compare;
+        });
+      } else if (sortBy === 'party_name') {
+        filtered.sort((a, b) => {
+          const compare = (a.party_name || '').localeCompare(b.party_name || '');
+          return sortOrder === 'asc' ? compare : -compare;
+        });
+      } else if (sortBy === 'salesman_name') {
+        filtered.sort((a, b) => {
+          const compare = (a.salesman_name || '').localeCompare(b.salesman_name || '');
+          return sortOrder === 'asc' ? compare : -compare;
+        });
+      }
     }
     
     return filtered;
-  }, [sortBy, sortOrder, searchQuery, statusFilter, returnTypeFilter]);
+  }, [sortBy, sortOrder, searchQuery, accountFilter, statusFilter, returnTypeFilter]);
 
-  const fetchReturns = async () => {
-    setIsListLoading(true);
-    try {
-      const res = await api.get('/sales-returns/');
-      setReturns(res.data);
-    } catch (err) {
-      console.error('Failed to fetch sales returns', err);
-    } finally {
-      setIsListLoading(false);
+  // ✅ Load from context - NO API CALL!
+  useEffect(() => {
+    if (salesReturns.length > 0) {
+      setLocalReturns(sortAndFilterReturns(salesReturns));
+      setIsLoading(false);
+    } else if (!contextLoading) {
+      fetchSalesReturns().then(() => {
+        setIsLoading(false);
+      });
+    } else {
+      setIsLoading(true);
     }
-  };
+  }, [salesReturns, sortAndFilterReturns, fetchSalesReturns, contextLoading]);
 
+  // ✅ Re-filter when filters change
   useEffect(() => {
-    fetchReturns();
-  }, [companySlug]);
-
-  useEffect(() => {
-    setLocalReturns(sortAndFilterReturns(returns));
-  }, [returns, sortAndFilterReturns]);
+    if (salesReturns.length > 0) {
+      setLocalReturns(sortAndFilterReturns(salesReturns));
+    }
+  }, [sortAndFilterReturns, salesReturns]);
 
   const handleSortChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const selected = sortOptions.find(opt => opt.value === e.target.value);
@@ -132,29 +154,27 @@ export const SalesReturnList: React.FC = () => {
     }
   };
 
-  const handleToggleStatus = async (id: string, currentStatus: string) => {
-    const nextStatus = currentStatus === 'pending' ? 'paid' : 'pending';
-    try {
-      await api.post(`/sales-returns/${id}/change-status/`, { status: nextStatus });
-      setSuccess(`Status updated to ${nextStatus.toUpperCase()}`);
-      fetchReturns();
-      setTimeout(() => setSuccess(''), 3000);
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to toggle status.');
-      setTimeout(() => setError(''), 4000);
-    }
-  };
-
   const handleDownloadPDF = (id: string) => {
     const url = `${api.defaults.baseURL}/sales-returns/${id}/download-pdf/`;
     window.open(url, '_blank');
   };
 
-  const companyReturns = localReturns.filter(ret => ret.company === activeCompany?.id);
+  // ✅ Click on row - navigates to VIEW mode (read-only)
+  const handleRowClick = (id: string) => {
+    navigate(`/branch/${branchSlug}/company/${companySlug}/sales-return/${id}`);
+  };
+
+  const handleEditClick = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    navigate(`/branch/${branchSlug}/company/${companySlug}/sales-return/${id}/edit`);
+  };
+
+  const companyReturns = useMemo(() => {
+    return localReturns.filter(ret => ret.company === activeCompany?.id);
+  }, [localReturns, activeCompany]);
 
   return (
     <div className="space-y-5">
-      {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Sales Returns</h1>
@@ -173,10 +193,9 @@ export const SalesReturnList: React.FC = () => {
         </button>
       </div>
 
-      {/* Filters - All Dropdowns */}
+      {/* Search bar - max width full */}
       <div className="flex flex-wrap items-center gap-3">
-        {/* Search */}
-        <div className="relative flex-1 min-w-[200px]">
+        <div className="relative flex-1 min-w-[250px] max-w-full">
           <input
             type="text"
             value={searchQuery}
@@ -205,8 +224,7 @@ export const SalesReturnList: React.FC = () => {
           )}
         </div>
 
-        {/* Sort Dropdown */}
-        <div className="min-w-[180px]">
+        <div className="min-w-[150px]">
           <select
             value={getCurrentSortValue()}
             onChange={handleSortChange}
@@ -218,8 +236,19 @@ export const SalesReturnList: React.FC = () => {
           </select>
         </div>
 
-        {/* Status Dropdown */}
-        <div className="min-w-[140px]">
+        <div className="min-w-[150px]">
+          <select
+            value={accountFilter}
+            onChange={(e) => setAccountFilter(e.target.value)}
+            className="w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-sm text-slate-900 outline-none transition-colors focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+          >
+            {accountOptions.map(opt => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="min-w-[130px]">
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value as 'all' | 'pending' | 'paid')}
@@ -231,8 +260,7 @@ export const SalesReturnList: React.FC = () => {
           </select>
         </div>
 
-        {/* Type Dropdown */}
-        <div className="min-w-[140px]">
+        <div className="min-w-[130px]">
           <select
             value={returnTypeFilter}
             onChange={(e) => setReturnTypeFilter(e.target.value as 'all' | 'normal' | 'damage')}
@@ -245,45 +273,51 @@ export const SalesReturnList: React.FC = () => {
         </div>
       </div>
 
-      {/* Table */}
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        {isListLoading ? (
-          <div className="flex items-center justify-center py-16">
-            <div className="flex flex-col items-center gap-3">
-              <div className="h-8 w-8 animate-spin rounded-full border-2 border-blue-600 border-t-transparent"></div>
-              <p className="text-sm text-slate-500">Loading sales returns...</p>
-            </div>
-          </div>
-        ) : companyReturns.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 text-center">
-            <p className="text-sm font-semibold text-slate-700">
-              {searchQuery ? 'No sales returns found matching your search' : 'No sales returns found'}
-            </p>
-            <p className="mt-1 text-xs text-slate-400">
-              {searchQuery ? 'Try adjusting your search terms' : 'Click "New Sales Return" to create the first one.'}
-            </p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="border-b border-slate-200 bg-slate-50">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="border-b border-slate-200 bg-slate-50">
+              <tr>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Code</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Date</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Customer</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Salesman</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Account</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Net Amount</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Type</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Status</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {isLoading ? (
                 <tr>
-                  {['Code', 'Date', 'Customer', 'Salesman', 'Account', 'Total Net Amount', 'Type', 'Status', 'Actions'].map(h => (
-                    <th key={h} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">{h}</th>
-                  ))}
+                  <td colSpan={9} className="px-4 py-12 text-center">
+                    <div className="flex items-center justify-center">
+                      <div className="h-8 w-8 animate-spin rounded-full border-2 border-blue-600 border-t-transparent"></div>
+                      <span className="ml-3 text-sm text-slate-500">Loading...</span>
+                    </div>
+                  </td>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {companyReturns.map((ret) => (
-                  <tr key={ret.id} className="transition-colors hover:bg-slate-50">
+              ) : companyReturns.length === 0 ? (
+                <tr>
+                  <td colSpan={9} className="px-4 py-12 text-center text-sm text-slate-500">
+                    {searchQuery ? 'No sales returns found matching your search' : 'No sales returns found'}
+                  </td>
+                </tr>
+              ) : (
+                companyReturns.map((ret) => (
+                  <tr 
+                    key={ret.id} 
+                    className="transition-colors hover:bg-slate-50 cursor-pointer"
+                    onClick={() => handleRowClick(ret.id)}
+                  >
                     <td className="px-4 py-3.5 font-bold text-navy">{ret.sales_return_code}</td>
                     <td className="px-4 py-3.5 text-slate-500">{ret.date}</td>
-                    <td className="px-4 py-3.5 font-semibold text-slate-800">{ret.party_name}</td>
-                    <td className="px-4 py-3.5 text-slate-500">{ret.salesman_name}</td>
-                    <td className="px-4 py-3.5 text-slate-500">{ret.account_name}</td>
-                    <td className="px-4 py-3.5 font-bold text-navy">Rs. {parseFloat(ret.net_amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                    
-                    {/* ✅ Type Column */}
+                    <td className="px-4 py-3.5 font-semibold text-slate-800 truncate max-w-[180px]">{ret.party_name}</td>
+                    <td className="px-4 py-3.5 text-slate-500 truncate max-w-[140px]">{ret.salesman_name}</td>
+                    <td className="px-4 py-3.5 text-slate-500 truncate max-w-[160px]">{ret.account_name}</td>
+                    <td className="px-4 py-3.5 font-bold text-navy text-right">Rs. {parseFloat(ret.net_amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                     <td className="px-4 py-3.5">
                       <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wider uppercase transition-all shadow-xs ${
                         ret.return_type === 'damage'
@@ -293,26 +327,19 @@ export const SalesReturnList: React.FC = () => {
                         {ret.return_type || 'normal'}
                       </span>
                     </td>
-                    
-                    {/* ✅ Status Column - Pending = Red, Paid = Green */}
                     <td className="px-4 py-3.5">
-                      <button
-                        onClick={() => handleToggleStatus(ret.id, ret.status)}
-                        title="Click to toggle status"
-                        className={`px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wider uppercase transition-all shadow-xs ${
-                          ret.status === 'paid'
-                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100'
-                            : 'bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100'
-                        }`}
-                      >
+                      <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wider uppercase transition-all shadow-xs ${
+                        ret.status === 'paid'
+                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                          : 'bg-rose-50 text-rose-700 border border-rose-200'
+                      }`}>
                         {ret.status}
-                      </button>
+                      </span>
                     </td>
-                    
                     <td className="px-4 py-3.5 whitespace-nowrap">
-                      <div className="flex gap-2">
+                      <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
                         <button
-                          onClick={() => navigate(`/branch/${branchSlug}/company/${companySlug}/sales-return/${ret.id}/edit`)}
+                          onClick={(e) => handleEditClick(ret.id, e)}
                           className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:border-slate-400 hover:text-slate-900"
                         >
                           Edit
@@ -326,11 +353,11 @@ export const SalesReturnList: React.FC = () => {
                       </div>
                     </td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );

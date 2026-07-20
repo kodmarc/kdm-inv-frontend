@@ -314,8 +314,8 @@ export const OrgReports: React.FC = () => {
             className="min-w-[140px] px-3 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 bg-white"
           >
             <option value="all">All Status</option>
-            <option value="active">Has Active Staff</option>
-            <option value="inactive">Has Inactive Staff</option>
+            <option value="active">Active Staff</option>
+            <option value="inactive">Inactive Staff</option>
           </select>
 
           <select

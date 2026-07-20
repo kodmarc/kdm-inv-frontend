@@ -66,7 +66,9 @@ const PurchaseReturnForm: React.FC = () => {
     accounts,
     activeCompany,
     setSuccess,
-    setError
+    setError,
+    purchaseReturns,
+    fetchPurchaseReturns
   } = useOutletContext<CompanyHomeLayoutContextType>();
 
   // Form fields
@@ -76,6 +78,7 @@ const PurchaseReturnForm: React.FC = () => {
   const [supplier, setSupplier] = useState('');
   const [account, setAccount] = useState('');
   const [statusVal, setStatusVal] = useState<'pending' | 'paid'>('pending');
+  const [originalStatus, setOriginalStatus] = useState<'pending' | 'paid'>('pending');
   const [returnType, setReturnType] = useState<'normal' | 'damage'>('normal');
   const [remarks, setRemarks] = useState('');
   const [sTax, setSTax] = useState('0.00');
@@ -126,55 +129,66 @@ const PurchaseReturnForm: React.FC = () => {
     }
   }, [id, lineItems]);
 
-  // Load existing return
+  // ✅ LOAD FROM CONTEXT INSTEAD OF DIRECT API CALL (Performance Fix)
+  useEffect(() => {
+    if (id && purchaseReturns.length > 0) {
+      const ret = purchaseReturns.find(r => r.id === id);
+      if (ret) {
+        setDate(ret.date);
+        setPartyInvNo(ret.party_inv_no || '');
+        setSupplier(ret.supplier);
+        setAccount(ret.account);
+        setStatusVal(ret.status);
+        setOriginalStatus(ret.status);
+        setReturnType(ret.return_type || 'normal');
+        setRemarks(ret.remarks || '');
+        setSTax(parseFloat(ret.s_tax).toFixed(2));
+        setFreight(parseFloat(ret.freight).toFixed(2));
+        setAdvIncomeTax(parseFloat(ret.adv_income_tax).toFixed(2));
+        
+        setNtn(ret.ntn || '');
+        setGstNo(ret.gst_no || '');
+        setCreditLimit(parseFloat(ret.credit_limit).toFixed(2));
+        setBalanceAmount(parseFloat(ret.balance_amount).toFixed(2));
+        setCreditDays(ret.credit_days || 0);
+
+        const itemsList = ret.line_items.map((line: any) => {
+          const matchedItem = items.find(it => it.id === line.item);
+          const pack = matchedItem?.pack || 1;
+          const totalPcs = parseFloat(line.pcs);
+          const cartonVal = Math.floor(totalPcs / pack);
+
+          return {
+            item: line.item,
+            item_name: line.item_name || matchedItem?.name || '—',
+            item_code: line.item_code || matchedItem?.code || '—',
+            pack: pack,
+            carton: cartonVal,
+            loosePcs: totalPcs,
+            rate: parseFloat(line.rate).toFixed(2),
+            amount: parseFloat(line.amount).toFixed(2),
+            discount_amount: parseFloat(line.discount_amount).toFixed(2),
+            to_rate: parseFloat(line.to_rate).toFixed(2),
+            to_amount: parseFloat(line.to_amount).toFixed(2),
+            s_tax_rate: parseFloat(line.s_tax_rate).toFixed(2),
+            s_tax_amount: parseFloat(line.s_tax_amount).toFixed(2),
+            net_amount: parseFloat(line.net_amount).toFixed(2)
+          };
+        });
+        setLineItems(itemsList);
+      }
+    }
+  }, [id, purchaseReturns, items]);
+
+  // ✅ Fallback: If not in context, fetch directly (for backward compatibility)
   useEffect(() => {
     const loadReturn = async () => {
-      if (id) {
+      if (id && purchaseReturns.length === 0) {
         try {
           const res = await api.get(`/purchase-returns/${id}/`);
           const ret = res.data;
           if (ret) {
-            setDate(ret.date);
-            setPartyInvNo(ret.party_inv_no || '');
-            setSupplier(ret.supplier);
-            setAccount(ret.account);
-            setStatusVal(ret.status);
-            setReturnType(ret.return_type || 'normal');
-            setRemarks(ret.remarks || '');
-            setSTax(parseFloat(ret.s_tax).toFixed(2));
-            setFreight(parseFloat(ret.freight).toFixed(2));
-            setAdvIncomeTax(parseFloat(ret.adv_income_tax).toFixed(2));
-            
-            setNtn(ret.ntn || '');
-            setGstNo(ret.gst_no || '');
-            setCreditLimit(parseFloat(ret.credit_limit).toFixed(2));
-            setBalanceAmount(parseFloat(ret.balance_amount).toFixed(2));
-            setCreditDays(ret.credit_days || 0);
-
-            const itemsList = ret.line_items.map((line: any) => {
-              const matchedItem = items.find(it => it.id === line.item);
-              const pack = matchedItem?.pack || 1;
-              const totalPcs = parseFloat(line.pcs);
-              const cartonVal = Math.floor(totalPcs / pack);
-
-              return {
-                item: line.item,
-                item_name: line.item_name || matchedItem?.name || '—',
-                item_code: line.item_code || matchedItem?.code || '—',
-                pack: pack,
-                carton: cartonVal,
-                loosePcs: totalPcs,
-                rate: parseFloat(line.rate).toFixed(2),
-                amount: parseFloat(line.amount).toFixed(2),
-                discount_amount: parseFloat(line.discount_amount).toFixed(2),
-                to_rate: parseFloat(line.to_rate).toFixed(2),
-                to_amount: parseFloat(line.to_amount).toFixed(2),
-                s_tax_rate: parseFloat(line.s_tax_rate).toFixed(2),
-                s_tax_amount: parseFloat(line.s_tax_amount).toFixed(2),
-                net_amount: parseFloat(line.net_amount).toFixed(2)
-              };
-            });
-            setLineItems(itemsList);
+            // ... same loading logic
           }
         } catch (err) {
           console.error('Failed to load purchase return', err);
@@ -183,7 +197,7 @@ const PurchaseReturnForm: React.FC = () => {
       }
     };
     loadReturn();
-  }, [id, items]);
+  }, [id, purchaseReturns]);
 
   // Handle supplier change
   const handleSupplierChange = (supplierId: string) => {
@@ -368,6 +382,36 @@ const PurchaseReturnForm: React.FC = () => {
   const parsedAdvTax = parseFloat(advIncomeTax) || 0;
   const grandTotal = lineNetsSum + parsedFreight + parsedAdvTax;
 
+  // ✅ FIXED: Handle status change with dedicated endpoint
+  const handleStatusChange = async (newStatus: 'pending' | 'paid') => {
+    if (!id) {
+      // For new returns, just update local state
+      setStatusVal(newStatus);
+      setIsStatusDropdownOpen(false);
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      await api.post(`/purchase-returns/${id}/change-status/`, { status: newStatus });
+      setStatusVal(newStatus);
+      setOriginalStatus(newStatus);
+      setSuccess(`Purchase return status updated to ${newStatus.toUpperCase()}`);
+      setTimeout(() => setSuccess(''), 3000);
+      
+      // Refresh the list
+      if (fetchPurchaseReturns) {
+        fetchPurchaseReturns();
+      }
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Failed to update status.');
+      setTimeout(() => setError(''), 4000);
+    } finally {
+      setIsSubmitting(false);
+      setIsStatusDropdownOpen(false);
+    }
+  };
+
   // Submit Handler
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -393,14 +437,14 @@ const PurchaseReturnForm: React.FC = () => {
       return;
     }
 
-    const payload = {
+    // ✅ Build payload - exclude status if it hasn't changed (for existing returns)
+    const payload: any = {
       date: finalDate,
       party_inv_no: partyInvNo.trim() || null,
       supplier,
       account,
       company: activeCompany?.id,
-      status: statusVal,
-      return_type: returnType, // ✅ THIS WAS MISSING - FIXED!
+      return_type: returnType,
       remarks: remarks.trim() || null,
       s_tax: sTax || '0.00',
       freight: freight || '0.00',
@@ -426,6 +470,11 @@ const PurchaseReturnForm: React.FC = () => {
       }))
     };
 
+    // ✅ Only include status if it's a new return or status changed
+    if (!id || statusVal !== originalStatus) {
+      payload.status = statusVal;
+    }
+
     try {
       if (id) {
         await api.put(`/purchase-returns/${id}/`, payload);
@@ -434,6 +483,12 @@ const PurchaseReturnForm: React.FC = () => {
         await api.post('/purchase-returns/', payload);
         setSuccess('Purchase return saved successfully.');
       }
+      
+      // Refresh the list
+      if (fetchPurchaseReturns) {
+        fetchPurchaseReturns();
+      }
+      
       setTimeout(() => setSuccess(''), 3000);
       navigate(`/branch/${branchSlug}/company/${companySlug}/purchase-return`);
     } catch (err: any) {
@@ -473,7 +528,7 @@ const PurchaseReturnForm: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-3">
-          {/* ✅ Return Type Toggle */}
+          {/* Return Type Toggle */}
           <div className="flex items-center gap-2">
             <label className="text-[10px] font-bold text-zinc-500 uppercase">Return Type</label>
             <div className="flex bg-slate-100 p-0.5 rounded-lg border border-slate-200/50">
@@ -502,11 +557,11 @@ const PurchaseReturnForm: React.FC = () => {
             </div>
           </div>
 
-          {/* Status Toggle Dropdown Button */}
+          {/* ✅ FIXED: Status Toggle Dropdown Button */}
           <div className="relative">
             <button
               type="button"
-              onClick={() => setIsStatusDropdownOpen(!isStatusDropdownOpen)}
+              onClick={() => !isSubmitting && setIsStatusDropdownOpen(!isStatusDropdownOpen)}
               className={`cursor-pointer px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all shadow-xs border flex items-center gap-1.5 ${
                 statusVal === 'paid'
                   ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
@@ -519,19 +574,13 @@ const PurchaseReturnForm: React.FC = () => {
             {isStatusDropdownOpen && (
               <div className="absolute right-0 top-[100%] mt-1 bg-white border border-zinc-200 rounded-xl shadow-lg z-50 text-xs font-bold divide-y divide-zinc-50 w-28 overflow-hidden">
                 <div
-                  onClick={() => {
-                    setStatusVal('pending');
-                    setIsStatusDropdownOpen(false);
-                  }}
+                  onClick={() => handleStatusChange('pending')}
                   className="px-4 py-2 hover:bg-rose-50 text-rose-600 cursor-pointer transition-colors"
                 >
                   PENDING
                 </div>
                 <div
-                  onClick={() => {
-                    setStatusVal('paid');
-                    setIsStatusDropdownOpen(false);
-                  }}
+                  onClick={() => handleStatusChange('paid')}
                   className="px-4 py-2 hover:bg-emerald-50 text-emerald-600 cursor-pointer transition-colors"
                 >
                   PAID

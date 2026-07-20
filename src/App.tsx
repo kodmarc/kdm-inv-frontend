@@ -37,7 +37,7 @@ import PurchaseInvoiceForm from './pages/Branch/CompanyHome/Transactions/Purchas
 import PurchaseReturnList from './pages/Branch/CompanyHome/Transactions/PurchaseReturnList';
 import PurchaseReturnForm from './pages/Branch/CompanyHome/Transactions/PurchaseReturnForm';
 
-// ✅ SALES RETURN (renamed from Damage Receiving)
+// ✅ SALES RETURN
 import SalesReturnList from './pages/Branch/CompanyHome/Transactions/SalesReturnList';
 import SalesReturnForm from './pages/Branch/CompanyHome/Transactions/SalesReturnForm';
 
@@ -111,11 +111,13 @@ function App() {
               {/* Purchase Return */}
               <Route path="/branch/:branchSlug/company/:companySlug/purchase-return" element={<PurchaseReturnList />} />
               <Route path="/branch/:branchSlug/company/:companySlug/purchase-return/new" element={<PurchaseReturnForm />} />
+              <Route path="/branch/:branchSlug/company/:companySlug/purchase-return/:id" element={<PurchaseReturnForm />} />
               <Route path="/branch/:branchSlug/company/:companySlug/purchase-return/:id/edit" element={<PurchaseReturnForm />} />
 
-              {/* ✅ Sales Return (renamed from Damage Receiving) */}
+              {/* ✅ Sales Return - All routes in one place */}
               <Route path="/branch/:branchSlug/company/:companySlug/sales-return" element={<SalesReturnList />} />
               <Route path="/branch/:branchSlug/company/:companySlug/sales-return/new" element={<SalesReturnForm />} />
+              <Route path="/branch/:branchSlug/company/:companySlug/sales-return/:id" element={<SalesReturnForm />} />
               <Route path="/branch/:branchSlug/company/:companySlug/sales-return/:id/edit" element={<SalesReturnForm />} />
 
               <Route path="/branch/:branchSlug/company/:companySlug/load-form" element={<LoadForm />} />

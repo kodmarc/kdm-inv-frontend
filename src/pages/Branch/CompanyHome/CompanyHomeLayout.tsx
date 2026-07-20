@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../../../context/AuthContext';
 import { useParams, useNavigate, useLocation, Outlet } from 'react-router-dom';
 import api from '../../../services/api';
@@ -41,6 +41,8 @@ export interface ItemItem {
   is_active: boolean;
   current_stock?: string;
   damaged_stock?: string;
+  created_at?: string;        // ✅ ADDED
+  updated_at?: string;        // ✅ ADDED (optional but good to have)
 }
 
 export interface OrderBookerItem {
@@ -171,6 +173,60 @@ export interface PurchaseInvoiceItem {
   created_at: string;
 }
 
+// ✅ Add interfaces for returns
+export interface SalesReturnItem {
+  id: string;
+  sales_return_code: string;
+  date: string;
+  salesman: string;
+  salesman_name: string;
+  party: string;
+  party_name: string;
+  account: string;
+  account_name: string;
+  company: string;
+  company_name: string;
+  status: 'pending' | 'paid';
+  return_type: 'normal' | 'damage';
+  remarks?: string;
+  s_tax: string;
+  net_amount: string;
+  ntn?: string;
+  gst_no?: string;
+  credit_days: number;
+  credit_limit: string;
+  balance_amount: string;
+  line_items: any[];
+  created_at: string;
+}
+
+export interface PurchaseReturnItem {
+  id: string;
+  purchase_return_code: string;
+  date: string;
+  party_inv_no?: string;
+  supplier: string;
+  supplier_name: string;
+  account: string;
+  account_name: string;
+  company: string;
+  company_name: string;
+  status: 'pending' | 'paid';
+  return_type: 'normal' | 'damage';
+  remarks?: string;
+  s_tax: string;
+  freight: string;
+  adv_income_tax: string;
+  net_amount: string;
+  ntn?: string;
+  gst_no?: string;
+  credit_days: number;
+  credit_limit: string;
+  balance_amount: string;
+  line_items: any[];
+  created_at: string;
+}
+
 export interface CompanyHomeLayoutContextType {
   companies: CompanyItem[];
   categories: ItemCategoryItem[];
@@ -181,6 +237,8 @@ export interface CompanyHomeLayoutContextType {
   accounts: AccountOpeningItem[];
   salesInvoices: SalesInvoiceItem[];
   purchaseInvoices: PurchaseInvoiceItem[];
+  salesReturns: SalesReturnItem[];
+  purchaseReturns: PurchaseReturnItem[];
   isLoading: boolean;
   success: string;
   setSuccess: React.Dispatch<React.SetStateAction<string>>;
@@ -195,8 +253,9 @@ export interface CompanyHomeLayoutContextType {
   fetchAccounts: () => Promise<void>;
   fetchSalesInvoices: () => Promise<void>;
   fetchPurchaseInvoices: () => Promise<void>;
+  fetchSalesReturns: () => Promise<void>;
+  fetchPurchaseReturns: () => Promise<void>;
   activeCompany: CompanyItem | undefined;
-  
 }
 
 const roleLabels: Record<string, string> = {
@@ -208,7 +267,7 @@ const roleLabels: Record<string, string> = {
 };
 
 const MANAGE_SUBS = ['items', 'categories', 'order-bookers', 'salesmen', 'parties', 'accounts'];
-const TRANSACTION_SUBS = ['purchase-invoice', 'sales-invoice', 'purchase-return', 'damage-return', 'damage-receiving', 'load-form', 'daily-sales-report'];
+const TRANSACTION_SUBS = ['purchase-invoice', 'sales-invoice', 'purchase-return', 'sales-return', 'load-form', 'daily-sales-report'];
 
 export const CompanyHomeLayout: React.FC = () => {
   const { user, logout } = useAuth();
@@ -228,6 +287,9 @@ export const CompanyHomeLayout: React.FC = () => {
   const [accounts, setAccounts] = useState<AccountOpeningItem[]>([]);
   const [salesInvoices, setSalesInvoices] = useState<SalesInvoiceItem[]>([]);
   const [purchaseInvoices, setPurchaseInvoices] = useState<PurchaseInvoiceItem[]>([]);
+  const [salesReturns, setSalesReturns] = useState<SalesReturnItem[]>([]);
+  const [purchaseReturns, setPurchaseReturns] = useState<PurchaseReturnItem[]>([]);
+  
   const [isLoading, setIsLoading] = useState(false);
   const [success, setSuccess] = useState('');
   const [error, setError] = useState('');
@@ -245,50 +307,76 @@ export const CompanyHomeLayout: React.FC = () => {
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
-  const fetchCompanies = async () => {
+  const fetchCompanies = useCallback(async () => {
     try { const r = await api.get('/companies/'); setCompanies(r.data); } catch { /* silent */ }
-  };
-  const fetchCategories = async () => {
-    try { const r = await api.get('/item-categories/'); setCategories(r.data); } catch { /* silent */ }
-  };
-// In the CompanyHomeLayout component, update the fetchItems function:
-const fetchItems = async (sortBy?: string, sortOrder?: string) => {
-  setIsLoading(true);
-  try {
-    let url = `/items/?company_code=${companySlug}`;
-    if (sortBy) {
-      url += `&sort_by=${sortBy}`;
-    }
-    if (sortOrder) {
-      url += `&sort_order=${sortOrder}`;
-    }
-    const r = await api.get(url);
-    setItems(r.data);
-  } catch {
-    setError('Failed to fetch items catalogue.');
-  } finally {
-    setIsLoading(false);
-  }
-};
-  const fetchOrderBookers = async () => {
-    try { const r = await api.get('/order-bookers/'); setOrderBookers(r.data); } catch { /* silent */ }
-  };
-  const fetchSalesmen = async () => {
-    try { const r = await api.get('/salesmen/'); setSalesmen(r.data); } catch { /* silent */ }
-  };
-  const fetchParties = async () => {
-    try { const r = await api.get('/parties/'); setParties(r.data); } catch { /* silent */ }
-  };
-  const fetchSalesInvoices = async () => {
-    try { const r = await api.get('/sales-invoices/'); setSalesInvoices(r.data); } catch { /* silent */ }
-  };
-  const fetchPurchaseInvoices = async () => {
-    try { const r = await api.get('/purchase-invoices/'); setPurchaseInvoices(r.data); } catch { /* silent */ }
-  };
-  const fetchAccounts = async () => {
-    try { const r = await api.get('/accounts/'); setAccounts(r.data); } catch { /* silent */ }
-  };
+  }, []);
 
+  const fetchCategories = useCallback(async () => {
+    try { const r = await api.get('/item-categories/'); setCategories(r.data); } catch { /* silent */ }
+  }, []);
+
+  const fetchItems = useCallback(async (sortBy?: string, sortOrder?: string) => {
+    setIsLoading(true);
+    try {
+      let url = `/items/?company_code=${companySlug}`;
+      if (sortBy) {
+        url += `&sort_by=${sortBy}`;
+      }
+      if (sortOrder) {
+        url += `&sort_order=${sortOrder}`;
+      }
+      const r = await api.get(url);
+      setItems(r.data);
+    } catch {
+      setError('Failed to fetch items catalogue.');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [companySlug]);
+
+  const fetchOrderBookers = useCallback(async () => {
+    try { const r = await api.get('/order-bookers/'); setOrderBookers(r.data); } catch { /* silent */ }
+  }, []);
+
+  const fetchSalesmen = useCallback(async () => {
+    try { const r = await api.get('/salesmen/'); setSalesmen(r.data); } catch { /* silent */ }
+  }, []);
+
+  const fetchParties = useCallback(async () => {
+    try { const r = await api.get('/parties/'); setParties(r.data); } catch { /* silent */ }
+  }, []);
+
+  const fetchSalesInvoices = useCallback(async () => {
+    try { const r = await api.get('/sales-invoices/'); setSalesInvoices(r.data); } catch { /* silent */ }
+  }, []);
+
+  const fetchPurchaseInvoices = useCallback(async () => {
+    try { const r = await api.get('/purchase-invoices/'); setPurchaseInvoices(r.data); } catch { /* silent */ }
+  }, []);
+
+  const fetchAccounts = useCallback(async () => {
+    try { const r = await api.get('/accounts/'); setAccounts(r.data); } catch { /* silent */ }
+  }, []);
+
+  const fetchSalesReturns = useCallback(async () => {
+    try {
+      const res = await api.get('/sales-returns/');
+      setSalesReturns(res.data);
+    } catch (err) {
+      console.error('Failed to fetch sales returns:', err);
+    }
+  }, []);
+
+  const fetchPurchaseReturns = useCallback(async () => {
+    try {
+      const res = await api.get('/purchase-returns/');
+      setPurchaseReturns(res.data);
+    } catch (err) {
+      console.error('Failed to fetch purchase returns:', err);
+    }
+  }, []);
+
+  // Load all data on mount
   useEffect(() => {
     fetchCompanies();
     fetchCategories();
@@ -299,7 +387,9 @@ const fetchItems = async (sortBy?: string, sortOrder?: string) => {
     fetchAccounts();
     fetchSalesInvoices();
     fetchPurchaseInvoices();
-  }, [companySlug]);
+    fetchSalesReturns();
+    fetchPurchaseReturns();
+  }, [companySlug]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const getSubRoutePath = (sub: string) => `/branch/${branchSlug}/company/${companySlug}/${sub}`;
 
@@ -396,29 +486,28 @@ const fetchItems = async (sortBy?: string, sortOrder?: string) => {
             )}
           </div>
 
-
-{/* Transactions */}
-<div className="relative">
-  <button onClick={(e) => toggle('transactions', e)} className={navBtnCls(isTransactionsActive)}>
-    Transactions <Chevron />
-  </button>
-  {openDropdown === 'transactions' && (
-    <div className="absolute left-0 top-full z-50 mt-1.5 w-52 overflow-hidden rounded-xl border border-slate-200 bg-white p-1 shadow-xl">
-      {[
-        ['Purchase Invoice', 'purchase-invoice'],
-        ['Sales Invoice', 'sales-invoice'],
-        ['Purchase Return', 'purchase-return'],
-        ['Sales Return', 'sales-return'],
-        ['Load Form', 'load-form'],
-        ['Daily Sales Report', 'daily-sales-report'],
-      ].map(([label, sub]) => (
-        <button key={sub} onClick={() => go(getSubRoutePath(sub))} className={dropItemCls(isActive(sub))}>
-          {label}
-        </button>
-      ))}
-    </div>
-  )}
-</div>
+          {/* Transactions */}
+          <div className="relative">
+            <button onClick={(e) => toggle('transactions', e)} className={navBtnCls(isTransactionsActive)}>
+              Transactions <Chevron />
+            </button>
+            {openDropdown === 'transactions' && (
+              <div className="absolute left-0 top-full z-50 mt-1.5 w-52 overflow-hidden rounded-xl border border-slate-200 bg-white p-1 shadow-xl">
+                {[
+                  ['Purchase Invoice', 'purchase-invoice'],
+                  ['Sales Invoice', 'sales-invoice'],
+                  ['Purchase Return', 'purchase-return'],
+                  ['Sales Return', 'sales-return'],
+                  ['Load Form', 'load-form'],
+                  ['Daily Sales Report', 'daily-sales-report'],
+                ].map(([label, sub]) => (
+                  <button key={sub} onClick={() => go(getSubRoutePath(sub))} className={dropItemCls(isActive(sub))}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
 
           {/* Account */}
           <div className="relative">
@@ -533,6 +622,7 @@ const fetchItems = async (sortBy?: string, sortOrder?: string) => {
           </div>
         )}
 
+        {/* ✅ Pass ALL context values including salesReturns and purchaseReturns */}
         <Outlet context={{
           companies,
           categories,
@@ -543,6 +633,8 @@ const fetchItems = async (sortBy?: string, sortOrder?: string) => {
           accounts,
           salesInvoices,
           purchaseInvoices,
+          salesReturns,      
+          purchaseReturns,   
           isLoading,
           success, setSuccess,
           error, setError,
@@ -555,6 +647,8 @@ const fetchItems = async (sortBy?: string, sortOrder?: string) => {
           fetchAccounts,
           fetchSalesInvoices,
           fetchPurchaseInvoices,
+          fetchSalesReturns,    
+          fetchPurchaseReturns,
           activeCompany
         }} />
       </main>
