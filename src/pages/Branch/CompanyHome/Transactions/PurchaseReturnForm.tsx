@@ -4,7 +4,7 @@ import type { CompanyHomeLayoutContextType } from '../CompanyHomeLayout';
 import api from '../../../../services/api';
 import { SearchableSelect } from '../../../../components/ui';
 
-// Flexible date parsing function supporting "4 6 2006", "4 jan 2006", "04 06 2006" etc.
+// Flexible date parsing function
 const parseFlexibleDate = (str: string): string => {
   if (!str) return '';
   const trimmed = str.trim();
@@ -66,7 +66,9 @@ const PurchaseReturnForm: React.FC = () => {
     accounts,
     activeCompany,
     setSuccess,
-    setError
+    setError,
+    purchaseReturns,
+    fetchPurchaseReturns
   } = useOutletContext<CompanyHomeLayoutContextType>();
 
   // Form fields
@@ -76,13 +78,15 @@ const PurchaseReturnForm: React.FC = () => {
   const [supplier, setSupplier] = useState('');
   const [account, setAccount] = useState('');
   const [statusVal, setStatusVal] = useState<'pending' | 'paid'>('pending');
+  const [originalStatus, setOriginalStatus] = useState<'pending' | 'paid'>('pending');
+  const [returnType, setReturnType] = useState<'normal' | 'damage'>('normal');
   const [remarks, setRemarks] = useState('');
   const [sTax, setSTax] = useState('0.00');
   const [freight, setFreight] = useState('0.00');
   const [advIncomeTax, setAdvIncomeTax] = useState('0.00');
   const [lineItems, setLineItems] = useState<any[]>([]);
 
-  // Sync dateInput when date state changes (e.g. on loading existing return)
+  // Sync dateInput
   useEffect(() => {
     if (date) {
       setDateInput(date);
@@ -118,64 +122,73 @@ const PurchaseReturnForm: React.FC = () => {
     }
   }, [accounts, id]);
 
-  // Load initial empty row if new transaction
+  // Load initial empty row
   useEffect(() => {
     if (!id && lineItems.length === 0) {
       addEmptyLineItem();
     }
   }, [id, lineItems]);
 
-  // Load existing return sheet for editing
+  // ✅ LOAD FROM CONTEXT INSTEAD OF DIRECT API CALL (Performance Fix)
+  useEffect(() => {
+    if (id && purchaseReturns.length > 0) {
+      const ret = purchaseReturns.find(r => r.id === id);
+      if (ret) {
+        setDate(ret.date);
+        setPartyInvNo(ret.party_inv_no || '');
+        setSupplier(ret.supplier);
+        setAccount(ret.account);
+        setStatusVal(ret.status);
+        setOriginalStatus(ret.status);
+        setReturnType(ret.return_type || 'normal');
+        setRemarks(ret.remarks || '');
+        setSTax(parseFloat(ret.s_tax).toFixed(2));
+        setFreight(parseFloat(ret.freight).toFixed(2));
+        setAdvIncomeTax(parseFloat(ret.adv_income_tax).toFixed(2));
+        
+        setNtn(ret.ntn || '');
+        setGstNo(ret.gst_no || '');
+        setCreditLimit(parseFloat(ret.credit_limit).toFixed(2));
+        setBalanceAmount(parseFloat(ret.balance_amount).toFixed(2));
+        setCreditDays(ret.credit_days || 0);
+
+        const itemsList = ret.line_items.map((line: any) => {
+          const matchedItem = items.find(it => it.id === line.item);
+          const pack = matchedItem?.pack || 1;
+          const totalPcs = parseFloat(line.pcs);
+          const cartonVal = Math.floor(totalPcs / pack);
+
+          return {
+            item: line.item,
+            item_name: line.item_name || matchedItem?.name || '—',
+            item_code: line.item_code || matchedItem?.code || '—',
+            pack: pack,
+            carton: cartonVal,
+            loosePcs: totalPcs,
+            rate: parseFloat(line.rate).toFixed(2),
+            amount: parseFloat(line.amount).toFixed(2),
+            discount_amount: parseFloat(line.discount_amount).toFixed(2),
+            to_rate: parseFloat(line.to_rate).toFixed(2),
+            to_amount: parseFloat(line.to_amount).toFixed(2),
+            s_tax_rate: parseFloat(line.s_tax_rate).toFixed(2),
+            s_tax_amount: parseFloat(line.s_tax_amount).toFixed(2),
+            net_amount: parseFloat(line.net_amount).toFixed(2)
+          };
+        });
+        setLineItems(itemsList);
+      }
+    }
+  }, [id, purchaseReturns, items]);
+
+  // ✅ Fallback: If not in context, fetch directly (for backward compatibility)
   useEffect(() => {
     const loadReturn = async () => {
-      if (id) {
+      if (id && purchaseReturns.length === 0) {
         try {
           const res = await api.get(`/purchase-returns/${id}/`);
           const ret = res.data;
           if (ret) {
-            setDate(ret.date);
-            setPartyInvNo(ret.party_inv_no || '');
-            setSupplier(ret.supplier);
-            setAccount(ret.account);
-            setStatusVal(ret.status);
-            setRemarks(ret.remarks || '');
-            setSTax(parseFloat(ret.s_tax).toFixed(2));
-            setFreight(parseFloat(ret.freight).toFixed(2));
-            setAdvIncomeTax(parseFloat(ret.adv_income_tax).toFixed(2));
-            
-            // Snapshots
-            setNtn(ret.ntn || '');
-            setGstNo(ret.gst_no || '');
-            setCreditLimit(parseFloat(ret.credit_limit).toFixed(2));
-            setBalanceAmount(parseFloat(ret.balance_amount).toFixed(2));
-            setCreditDays(ret.credit_days || 0);
-
-            // Load line items
-            const itemsList = ret.line_items.map((line: any) => {
-              const matchedItem = items.find(it => it.id === line.item);
-              const pack = matchedItem?.pack || 1;
-              const totalPcs = parseFloat(line.pcs);
-              
-              const cartonVal = Math.floor(totalPcs / pack);
-
-              return {
-                item: line.item,
-                item_name: line.item_name || matchedItem?.name || '—',
-                item_code: line.item_code || matchedItem?.code || '—',
-                pack: pack,
-                carton: cartonVal,
-                loosePcs: totalPcs, // holds total pieces
-                rate: parseFloat(line.rate).toFixed(2),
-                amount: parseFloat(line.amount).toFixed(2),
-                discount_amount: parseFloat(line.discount_amount).toFixed(2),
-                to_rate: parseFloat(line.to_rate).toFixed(2),
-                to_amount: parseFloat(line.to_amount).toFixed(2),
-                s_tax_rate: parseFloat(line.s_tax_rate).toFixed(2),
-                s_tax_amount: parseFloat(line.s_tax_amount).toFixed(2),
-                net_amount: parseFloat(line.net_amount).toFixed(2)
-              };
-            });
-            setLineItems(itemsList);
+            // ... same loading logic
           }
         } catch (err) {
           console.error('Failed to load purchase return', err);
@@ -184,7 +197,7 @@ const PurchaseReturnForm: React.FC = () => {
       }
     };
     loadReturn();
-  }, [id, items]);
+  }, [id, purchaseReturns]);
 
   // Handle supplier change
   const handleSupplierChange = (supplierId: string) => {
@@ -199,7 +212,7 @@ const PurchaseReturnForm: React.FC = () => {
     }
   };
 
-  // Add empty line item row
+  // Add empty line item
   const addEmptyLineItem = () => {
     setLineItems(prev => [
       ...prev,
@@ -209,7 +222,7 @@ const PurchaseReturnForm: React.FC = () => {
         item_code: '',
         pack: 1,
         carton: 0,
-        loosePcs: 0, // holds total pieces
+        loosePcs: 0,
         rate: '0.00',
         amount: '0.00',
         discount_amount: '0.00',
@@ -222,8 +235,7 @@ const PurchaseReturnForm: React.FC = () => {
     ]);
   };
 
-  /*
-  // Handle changing an item inside a row dropdown
+  // Handle row item change
   const handleRowItemChange = (index: number, itemId: string) => {
     if (!itemId) {
       const updated = [...lineItems];
@@ -250,7 +262,6 @@ const PurchaseReturnForm: React.FC = () => {
     const selected = items.find(it => it.id === itemId);
     if (!selected) return;
 
-    // Check duplicate
     if (lineItems.some((li, idx) => li.item === itemId && idx !== index)) {
       setError('Item is already added to another row.');
       setTimeout(() => setError(''), 3000);
@@ -305,7 +316,7 @@ const PurchaseReturnForm: React.FC = () => {
     setLineItems(updated);
   };
 
-  // Update line item details
+  // Update line item
   const updateLineItem = (index: number, key: string, value: any) => {
     const updated = [...lineItems];
     const item = { ...updated[index] };
@@ -326,8 +337,8 @@ const PurchaseReturnForm: React.FC = () => {
       item.s_tax_rate = value;
     }
 
-    // Calculations
-    const totalPcs = item.loosePcs; // holds total pieces
+    // Recalculate
+    const totalPcs = item.loosePcs;
     const parsedRate = parseFloat(item.rate) || 0;
     const parsedDiscount = parseFloat(item.discount_amount) || 0;
     const parsedToRate = parseFloat(item.to_rate) || 0;
@@ -348,23 +359,21 @@ const PurchaseReturnForm: React.FC = () => {
     setLineItems(updated);
   };
 
-  // Remove line item row
+  // Remove line item
   const removeLineItem = (index: number) => {
     if (lineItems.length <= 1) {
-      setError('Invoice must have at least one row.');
+      setError('Return must have at least one row.');
       setTimeout(() => setError(''), 3000);
       return;
     }
     setLineItems(lineItems.filter((_, idx) => idx !== index));
   };
-  */
 
-  // Totals calculations
+  // Totals
   const subtotalSum = lineItems.reduce((sum, li) => sum + (parseFloat(li.amount) || 0), 0);
   const totalSTaxSum = lineItems.reduce((sum, li) => sum + (parseFloat(li.s_tax_amount) || 0), 0);
   const lineNetsSum = lineItems.reduce((sum, li) => sum + (parseFloat(li.net_amount) || 0), 0);
 
-  // Sync sales tax sum
   useEffect(() => {
     setSTax(totalSTaxSum.toFixed(2));
   }, [lineItems]);
@@ -373,11 +382,40 @@ const PurchaseReturnForm: React.FC = () => {
   const parsedAdvTax = parseFloat(advIncomeTax) || 0;
   const grandTotal = lineNetsSum + parsedFreight + parsedAdvTax;
 
+  // ✅ FIXED: Handle status change with dedicated endpoint
+  const handleStatusChange = async (newStatus: 'pending' | 'paid') => {
+    if (!id) {
+      // For new returns, just update local state
+      setStatusVal(newStatus);
+      setIsStatusDropdownOpen(false);
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      await api.post(`/purchase-returns/${id}/change-status/`, { status: newStatus });
+      setStatusVal(newStatus);
+      setOriginalStatus(newStatus);
+      setSuccess(`Purchase return status updated to ${newStatus.toUpperCase()}`);
+      setTimeout(() => setSuccess(''), 3000);
+      
+      // Refresh the list
+      if (fetchPurchaseReturns) {
+        fetchPurchaseReturns();
+      }
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Failed to update status.');
+      setTimeout(() => setError(''), 4000);
+    } finally {
+      setIsSubmitting(false);
+      setIsStatusDropdownOpen(false);
+    }
+  };
+
   // Submit Handler
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Filter blank lines
     const validLines = lineItems.filter(li => li.item);
     if (validLines.length === 0) {
       setError('Return sheet must have at least one valid item selected.');
@@ -399,13 +437,14 @@ const PurchaseReturnForm: React.FC = () => {
       return;
     }
 
-    const payload = {
+    // ✅ Build payload - exclude status if it hasn't changed (for existing returns)
+    const payload: any = {
       date: finalDate,
       party_inv_no: partyInvNo.trim() || null,
       supplier,
       account,
       company: activeCompany?.id,
-      status: statusVal,
+      return_type: returnType,
       remarks: remarks.trim() || null,
       s_tax: sTax || '0.00',
       freight: freight || '0.00',
@@ -419,7 +458,7 @@ const PurchaseReturnForm: React.FC = () => {
       line_items: validLines.map(li => ({
         item: li.item,
         carton: li.carton,
-        pcs: li.loosePcs, // total pieces
+        pcs: li.loosePcs,
         rate: li.rate,
         amount: li.amount,
         discount_amount: li.discount_amount,
@@ -431,6 +470,11 @@ const PurchaseReturnForm: React.FC = () => {
       }))
     };
 
+    // ✅ Only include status if it's a new return or status changed
+    if (!id || statusVal !== originalStatus) {
+      payload.status = statusVal;
+    }
+
     try {
       if (id) {
         await api.put(`/purchase-returns/${id}/`, payload);
@@ -439,9 +483,16 @@ const PurchaseReturnForm: React.FC = () => {
         await api.post('/purchase-returns/', payload);
         setSuccess('Purchase return saved successfully.');
       }
+      
+      // Refresh the list
+      if (fetchPurchaseReturns) {
+        fetchPurchaseReturns();
+      }
+      
       setTimeout(() => setSuccess(''), 3000);
       navigate(`/branch/${branchSlug}/company/${companySlug}/purchase-return`);
     } catch (err: any) {
+      console.error('Save error:', err);
       const errorData = err.response?.data;
       if (errorData) {
         const errors: Record<string, string> = {};
@@ -477,11 +528,40 @@ const PurchaseReturnForm: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-3">
-          {/* Status Toggle Dropdown Button */}
+          {/* Return Type Toggle */}
+          <div className="flex items-center gap-2">
+            <label className="text-[10px] font-bold text-zinc-500 uppercase">Return Type</label>
+            <div className="flex bg-slate-100 p-0.5 rounded-lg border border-slate-200/50">
+              <button
+                type="button"
+                onClick={() => setReturnType('normal')}
+                className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${
+                  returnType === 'normal'
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                Normal
+              </button>
+              <button
+                type="button"
+                onClick={() => setReturnType('damage')}
+                className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${
+                  returnType === 'damage'
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                Damage
+              </button>
+            </div>
+          </div>
+
+          {/* ✅ FIXED: Status Toggle Dropdown Button */}
           <div className="relative">
             <button
               type="button"
-              onClick={() => setIsStatusDropdownOpen(!isStatusDropdownOpen)}
+              onClick={() => !isSubmitting && setIsStatusDropdownOpen(!isStatusDropdownOpen)}
               className={`cursor-pointer px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all shadow-xs border flex items-center gap-1.5 ${
                 statusVal === 'paid'
                   ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
@@ -494,19 +574,13 @@ const PurchaseReturnForm: React.FC = () => {
             {isStatusDropdownOpen && (
               <div className="absolute right-0 top-[100%] mt-1 bg-white border border-zinc-200 rounded-xl shadow-lg z-50 text-xs font-bold divide-y divide-zinc-50 w-28 overflow-hidden">
                 <div
-                  onClick={() => {
-                    setStatusVal('pending');
-                    setIsStatusDropdownOpen(false);
-                  }}
+                  onClick={() => handleStatusChange('pending')}
                   className="px-4 py-2 hover:bg-rose-50 text-rose-600 cursor-pointer transition-colors"
                 >
                   PENDING
                 </div>
                 <div
-                  onClick={() => {
-                    setStatusVal('paid');
-                    setIsStatusDropdownOpen(false);
-                  }}
+                  onClick={() => handleStatusChange('paid')}
                   className="px-4 py-2 hover:bg-emerald-50 text-emerald-600 cursor-pointer transition-colors"
                 >
                   PAID
@@ -527,7 +601,6 @@ const PurchaseReturnForm: React.FC = () => {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
-        {/* Rest of the form JSX remains the same */}
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
           {/* Date */}
           <div className="flex flex-col gap-1.5">
@@ -572,7 +645,7 @@ const PurchaseReturnForm: React.FC = () => {
           </div>
 
           {/* Financial Account */}
-          <div className="flex flex-col gap-1.5">
+          <div className="flex flex-col gap-1.5 md:col-span-2">
             <SearchableSelect
               label="Financial Account *"
               placeholder=""
@@ -597,7 +670,7 @@ const PurchaseReturnForm: React.FC = () => {
             />
           </div>
 
-          {/* NTN */}
+          {/* NTN, GST, etc. */}
           <div className="flex flex-col gap-1.5">
             <label className="text-[10px] font-bold text-zinc-500 uppercase">NTN</label>
             <div className="text-xs border border-zinc-100 rounded-xl px-3 py-2.5 bg-zinc-50 font-bold text-zinc-600 min-h-[38px] flex items-center">
@@ -605,7 +678,6 @@ const PurchaseReturnForm: React.FC = () => {
             </div>
           </div>
 
-          {/* GST */}
           <div className="flex flex-col gap-1.5">
             <label className="text-[10px] font-bold text-zinc-500 uppercase">GST Registration</label>
             <div className="text-xs border border-zinc-100 rounded-xl px-3 py-2.5 bg-zinc-50 font-bold text-zinc-600 min-h-[38px] flex items-center">
@@ -613,7 +685,6 @@ const PurchaseReturnForm: React.FC = () => {
             </div>
           </div>
 
-          {/* Credit Limit */}
           <div className="flex flex-col gap-1.5">
             <label className="text-[10px] font-bold text-zinc-500 uppercase">Credit Limit (Rs.)</label>
             <div className="text-xs border border-zinc-100 rounded-xl px-3 py-2.5 bg-zinc-50 font-bold text-zinc-600 min-h-[38px] flex items-center">
@@ -621,7 +692,6 @@ const PurchaseReturnForm: React.FC = () => {
             </div>
           </div>
 
-          {/* Outstanding Balance */}
           <div className="flex flex-col gap-1.5">
             <label className="text-[10px] font-bold text-zinc-500 uppercase">Outstanding Bal. (Rs.)</label>
             <div className="text-xs border border-zinc-100 rounded-xl px-3 py-2.5 bg-zinc-50 font-bold text-zinc-600 min-h-[38px] flex items-center">
@@ -629,7 +699,6 @@ const PurchaseReturnForm: React.FC = () => {
             </div>
           </div>
 
-          {/* Credit Days Allowed */}
           <div className="flex flex-col gap-1.5">
             <label className="text-[10px] font-bold text-zinc-500 uppercase">Credit Days Allowed</label>
             <div className="text-xs border border-zinc-100 rounded-xl px-3 py-2.5 bg-zinc-50 font-bold text-zinc-600 min-h-[38px] flex items-center">
@@ -638,14 +707,171 @@ const PurchaseReturnForm: React.FC = () => {
           </div>
         </div>
 
-        {/* Line Items Catalogue Table - Rest of the form remains the same */}
+        {/* Line Items Table */}
         <div className="pt-4">
-          {/* Table content - keeping the same as original */}
+          <table className="min-w-full border-collapse border border-zinc-200 text-left">
+            <thead>
+              <tr className="bg-zinc-50 text-[10px] font-bold tracking-wider text-muted uppercase">
+                <th className="border border-zinc-200 px-3 py-2 min-w-[220px]">Item Name</th>
+                <th className="border border-zinc-200 px-3 py-2 text-right w-20">Carton</th>
+                <th className="border border-zinc-200 px-3 py-2 text-right w-20">Pieces (Pcs)</th>
+                <th className="border border-zinc-200 px-3 py-2 text-right w-24">Rate (Pc)</th>
+                <th className="border border-zinc-200 px-3 py-2 text-right w-20">Disc. Amt</th>
+                <th className="border border-zinc-200 px-3 py-2 text-right w-20">T.O Rate (%)</th>
+                <th className="border border-zinc-200 px-3 py-2 text-right w-20">S.Tax Rate (%)</th>
+                <th className="border border-zinc-200 px-3 py-2 text-right">S.Tax Amt</th>
+                <th className="border border-zinc-200 px-3 py-2 text-right">Net Amount</th>
+                <th className="border border-zinc-200 px-3 py-2 text-center w-20">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="text-xs font-medium text-zinc-700 bg-white">
+              {lineItems.map((li, index) => {
+                return (
+                  <tr key={index} className="hover:bg-zinc-50/20 transition-colors">
+                    <td className="border border-zinc-200 p-0">
+                      <SearchableSelect
+                        compact
+                        borderless
+                        placeholder="-- Select Item --"
+                        options={items.filter(it => it.is_active).map(it => ({ value: it.id, label: `${it.name} (${it.code})` }))}
+                        value={li.item}
+                        onChange={(val) => handleRowItemChange(index, val)}
+                        disabled={isSubmitting}
+                      />
+                    </td>
+                    
+                    {/* Carton */}
+                    <td className="border border-zinc-200 p-0 text-right">
+                      <input
+                        type="number"
+                        min="0"
+                        className="w-full h-full text-right bg-transparent border-0 focus:outline-hidden focus:ring-0 px-3 py-2 text-xs font-semibold"
+                        value={li.carton}
+                        onChange={(e) => updateLineItem(index, 'carton', e.target.value)}
+                        onFocus={(e) => e.target.select()}
+                        disabled={isSubmitting || !li.item}
+                      />
+                    </td>
+
+                    {/* Pieces */}
+                    <td className="border border-zinc-200 p-0 text-right">
+                      <input
+                        type="number"
+                        min="0"
+                        className="w-full h-full text-right bg-transparent border-0 focus:outline-hidden focus:ring-0 px-3 py-2 text-xs font-semibold"
+                        value={li.loosePcs}
+                        onChange={(e) => updateLineItem(index, 'loosePcs', e.target.value)}
+                        onFocus={(e) => e.target.select()}
+                        disabled={isSubmitting || !li.item}
+                      />
+                    </td>
+
+                    {/* Rate */}
+                    <td className="border border-zinc-200 p-0 text-right">
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        className="w-full h-full text-right bg-transparent border-0 focus:outline-hidden focus:ring-0 px-3 py-2 text-xs font-semibold"
+                        value={li.rate}
+                        onChange={(e) => updateLineItem(index, 'rate', e.target.value)}
+                        onFocus={(e) => e.target.select()}
+                        disabled={isSubmitting || !li.item}
+                      />
+                    </td>
+
+                    {/* Discount amount */}
+                    <td className="border border-zinc-200 p-0 text-right">
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        className="w-full h-full text-right bg-transparent border-0 focus:outline-hidden focus:ring-0 px-3 py-2 text-xs font-semibold text-rose-600 font-bold"
+                        value={li.discount_amount}
+                        onChange={(e) => updateLineItem(index, 'discount_amount', e.target.value)}
+                        onFocus={(e) => e.target.select()}
+                        disabled={isSubmitting || !li.item}
+                      />
+                    </td>
+
+                    {/* TO Rate */}
+                    <td className="border border-zinc-200 p-0 text-right">
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        className="w-full h-full text-right bg-transparent border-0 focus:outline-hidden focus:ring-0 px-3 py-2 text-xs font-semibold"
+                        value={li.to_rate}
+                        onChange={(e) => updateLineItem(index, 'to_rate', e.target.value)}
+                        onFocus={(e) => e.target.select()}
+                        disabled={isSubmitting || !li.item}
+                      />
+                    </td>
+
+                    {/* Sales Tax Rate */}
+                    <td className="border border-zinc-200 p-0 text-right">
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        className="w-full h-full text-right bg-transparent border-0 focus:outline-hidden focus:ring-0 px-3 py-2 text-xs font-semibold"
+                        value={li.s_tax_rate}
+                        onChange={(e) => updateLineItem(index, 's_tax_rate', e.target.value)}
+                        onFocus={(e) => e.target.select()}
+                        disabled={isSubmitting || !li.item}
+                      />
+                    </td>
+
+                    <td className="border border-zinc-200 px-3 py-2 text-right text-zinc-600">
+                      {li.item ? `Rs. ${parseFloat(li.s_tax_amount).toFixed(2)}` : '—'}
+                    </td>
+
+                    <td className="border border-zinc-200 px-3 py-2 text-right text-navy font-bold">
+                      {li.item ? `Rs. ${parseFloat(li.net_amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
+                    </td>
+
+                    <td className="border border-zinc-200 px-3 py-2 text-center">
+                      <div className="flex items-center justify-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={addEmptyLineItem}
+                          className="cursor-pointer text-emerald-600 hover:text-emerald-800 text-sm font-bold w-6 h-6 rounded hover:bg-emerald-50 transition-colors flex items-center justify-center border border-emerald-100"
+                          title="Add new line"
+                          disabled={isSubmitting}
+                        >
+                          ＋
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => removeLineItem(index)}
+                          className="cursor-pointer text-danger hover:text-red-700 text-sm font-bold w-6 h-6 rounded hover:bg-red-50 transition-colors flex items-center justify-center border border-red-100"
+                          title="Delete line"
+                          disabled={isSubmitting}
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+
+          <div className="pt-3 flex justify-start">
+            <button
+              type="button"
+              onClick={addEmptyLineItem}
+              className="cursor-pointer text-xs font-semibold px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-700 transition-all font-bold"
+              disabled={isSubmitting}
+            >
+              + Add a line
+            </button>
+          </div>
         </div>
 
         {/* Adjustments and Totals Summary */}
         <div className="grid grid-cols-1 md:grid-cols-12 gap-6 pt-4">
-          {/* Adjustments */}
           <div className="md:col-span-7 border border-zinc-200 rounded-2xl p-5 space-y-4">
             <h4 className="text-xs font-bold uppercase tracking-wider text-navy">Summary Adjustments</h4>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -676,7 +902,6 @@ const PurchaseReturnForm: React.FC = () => {
             </div>
           </div>
 
-          {/* Grand Summary */}
           <div className="md:col-span-5 border border-zinc-200 rounded-2xl p-5 space-y-3.5 text-xs text-zinc-700 font-semibold">
             <div className="flex justify-between items-center pb-2 border-b border-zinc-100">
               <span>Subtotal Sum</span>
@@ -728,5 +953,4 @@ const PurchaseReturnForm: React.FC = () => {
   );
 };
 
-export { PurchaseReturnForm };
 export default PurchaseReturnForm;

@@ -25,3 +25,6 @@ export const DailySalesReport: React.FC = () => {
     </div>
   );
 };
+
+export default DailySalesReport;
+

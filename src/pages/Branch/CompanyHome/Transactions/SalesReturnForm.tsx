@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { useOutletContext, useParams, useNavigate } from 'react-router-dom';
+import { useOutletContext, useParams, useNavigate, useLocation } from 'react-router-dom';
 import type { CompanyHomeLayoutContextType } from '../CompanyHomeLayout';
 import api from '../../../../services/api';
 import { SearchableSelect } from '../../../../components/ui';
 
-// Flexible date parsing function supporting "4 6 2006", "4 jan 2006", "04 06 2006" etc.
+// Flexible date parsing function
 const parseFlexibleDate = (str: string): string => {
   if (!str) return '';
   const trimmed = str.trim();
@@ -55,32 +55,42 @@ const parseFlexibleDate = (str: string): string => {
   return trimmed;
 };
 
-export const DamageReturnForm: React.FC = () => {
+const SalesReturnForm: React.FC = () => {
   const { id } = useParams<{ id?: string }>();
   const { branchSlug, companySlug } = useParams<{ branchSlug: string; companySlug: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // Determine mode
+  const isNewMode = location.pathname.includes('/new') || !id;
+  const isEditMode = location.pathname.includes('/edit');
+  const isViewMode = !isNewMode && !isEditMode && !!id;
 
   const {
     items,
     parties,
+    salesmen,
     accounts,
     activeCompany,
     setSuccess,
-    setError
+    setError,
+    salesReturns,
+    fetchSalesReturns
   } = useOutletContext<CompanyHomeLayoutContextType>();
 
   // Form fields
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [dateInput, setDateInput] = useState(new Date().toISOString().split('T')[0]);
-  const [partyInvNo, setPartyInvNo] = useState('');
-  const [supplier, setSupplier] = useState('');
+  const [salesman, setSalesman] = useState('');
+  const [party, setParty] = useState('');
   const [account, setAccount] = useState('');
   const [statusVal, setStatusVal] = useState<'pending' | 'paid'>('pending');
+  const [returnType, setReturnType] = useState<'normal' | 'damage'>('normal');
   const [remarks, setRemarks] = useState('');
   const [sTax, setSTax] = useState('0.00');
   const [lineItems, setLineItems] = useState<any[]>([]);
 
-  // Sync dateInput when date state changes (e.g. on loading existing return)
+  // Sync dateInput
   useEffect(() => {
     if (date) {
       setDateInput(date);
@@ -95,7 +105,7 @@ export const DamageReturnForm: React.FC = () => {
     }
   };
 
-  // Snapshot/Display Fields from Supplier/Party
+  // Snapshot/Display Fields from Customer/Party
   const [ntn, setNtn] = useState('');
   const [gstNo, setGstNo] = useState('');
   const [creditLimit, setCreditLimit] = useState('0.00');
@@ -105,84 +115,87 @@ export const DamageReturnForm: React.FC = () => {
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isStatusDropdownOpen, setIsStatusDropdownOpen] = useState(false);
+  const [isReturnTypeDropdownOpen, setIsReturnTypeDropdownOpen] = useState(false);
 
-  const suppliers = parties.filter(p => p.is_supplier && p.is_active);
+  const customers = parties.filter(p => p.is_party && p.is_active);
+  const activeSalesmen = salesmen.filter(s => s.is_active);
   const activeAccounts = accounts.filter(a => a.is_active);
 
-  // Set default account
+  // Set default account & salesman
   useEffect(() => {
-    if (!id && activeAccounts.length > 0 && !account) {
-      setAccount(activeAccounts[0].id);
+    if (isNewMode) {
+      if (activeAccounts.length > 0 && !account) {
+        setAccount(activeAccounts[0].id);
+      }
+      if (activeSalesmen.length > 0 && !salesman) {
+        setSalesman(activeSalesmen[0].id);
+      }
     }
-  }, [accounts, id]);
+  }, [accounts, salesmen, isNewMode]);
 
-  // Load initial empty row if new transaction
+  // Load initial empty row
   useEffect(() => {
-    if (!id && lineItems.length === 0) {
+    if (isNewMode && lineItems.length === 0) {
       addEmptyLineItem();
     }
-  }, [id, lineItems]);
+  }, [isNewMode, lineItems]);
 
-  // Load existing return sheet for editing
+  // ✅ Load from context
   useEffect(() => {
-    const loadReturn = async () => {
-      if (id) {
-        try {
-          const res = await api.get(`/damage-returns/${id}/`);
-          const ret = res.data;
-          if (ret) {
-            setDate(ret.date);
-            setPartyInvNo(ret.party_inv_no || '');
-            setSupplier(ret.supplier);
-            setAccount(ret.account);
-            setStatusVal(ret.status);
-            setRemarks(ret.remarks || '');
-            setSTax(parseFloat(ret.s_tax).toFixed(2));
-            
-            // Snapshots
-            setNtn(ret.ntn || '');
-            setGstNo(ret.gst_no || '');
-            setCreditLimit(parseFloat(ret.credit_limit).toFixed(2));
-            setBalanceAmount(parseFloat(ret.balance_amount).toFixed(2));
-            setCreditDays(ret.credit_days || 0);
+    if (id && !isNewMode && salesReturns.length > 0) {
+      const ret = salesReturns.find(r => r.id === id);
+      if (ret) {
+        setDate(ret.date);
+        setDateInput(ret.date);
+        setSalesman(ret.salesman || '');
+        setParty(ret.party);
+        setAccount(ret.account);
+        setStatusVal(ret.status);
+        setReturnType(ret.return_type || 'normal');
+        setRemarks(ret.remarks || '');
+        setSTax(parseFloat(ret.s_tax).toFixed(2));
+        
+        setNtn(ret.ntn || '');
+        setGstNo(ret.gst_no || '');
+        setCreditLimit(parseFloat(ret.credit_limit).toFixed(2));
+        setBalanceAmount(parseFloat(ret.balance_amount).toFixed(2));
+        setCreditDays(ret.credit_days || 0);
 
-            // Load line items
-            const itemsList = ret.line_items.map((line: any) => {
-              const matchedItem = items.find(it => it.id === line.item);
-              const pack = matchedItem?.pack || 1;
-              const totalPcs = parseFloat(line.pcs);
-              
-              const cartonVal = Math.floor(totalPcs / pack);
+        // ❌ REMOVED: setOriginalData - not needed
 
-              return {
-                item: line.item,
-                item_name: line.item_name || matchedItem?.name || '—',
-                item_code: line.item_code || matchedItem?.code || '—',
-                pack: pack,
-                carton: cartonVal,
-                loosePcs: totalPcs, // holds total pieces
-                rate: parseFloat(line.rate).toFixed(2),
-                amount: parseFloat(line.amount).toFixed(2),
-                s_tax_rate: parseFloat(line.s_tax_rate).toFixed(2),
-                s_tax_amount: parseFloat(line.s_tax_amount).toFixed(2),
-                net_amount: parseFloat(line.net_amount).toFixed(2)
-              };
-            });
-            setLineItems(itemsList);
-          }
-        } catch (err) {
-          console.error('Failed to load damage return', err);
-          setError('Failed to load damage return data.');
-        }
+        const itemsList = ret.line_items.map((line: any) => {
+          const matchedItem = items.find(it => it.id === line.item);
+          const pack = matchedItem?.pack || 1;
+          const totalPcs = parseFloat(line.pcs);
+          const cartonVal = Math.floor(totalPcs / pack);
+
+          return {
+            item: line.item,
+            item_name: line.item_name || matchedItem?.name || '—',
+            item_code: line.item_code || matchedItem?.code || '—',
+            pack: pack,
+            carton: cartonVal,
+            manual_code: line.manual_code || '',
+            issue_units: parseFloat(line.issue_units) || 0,
+            pcs: totalPcs,
+            rate: parseFloat(line.rate).toFixed(2),
+            amount: parseFloat(line.amount).toFixed(2),
+            s_tax_rate: parseFloat(line.s_tax_rate).toFixed(2),
+            s_tax_amount: parseFloat(line.s_tax_amount).toFixed(2),
+            gross_amount: parseFloat(line.gross_amount).toFixed(2),
+            net_amount: parseFloat(line.net_amount).toFixed(2)
+          };
+        });
+        setLineItems(itemsList);
       }
-    };
-    loadReturn();
-  }, [id, items]);
+    }
+  }, [id, isNewMode, items, salesReturns]);
 
-  // Handle supplier change
-  const handleSupplierChange = (supplierId: string) => {
-    setSupplier(supplierId);
-    const selected = parties.find(p => p.id === supplierId);
+  // Handle party change
+  const handlePartyChange = (partyId: string) => {
+    if (isViewMode) return;
+    setParty(partyId);
+    const selected = parties.find(p => p.id === partyId);
     if (selected) {
       setNtn(selected.ntn || '');
       setGstNo(selected.gst_no || '');
@@ -192,8 +205,9 @@ export const DamageReturnForm: React.FC = () => {
     }
   };
 
-  // Add empty line item row
+  // Add empty line item
   const addEmptyLineItem = () => {
+    if (isViewMode) return;
     setLineItems(prev => [
       ...prev,
       {
@@ -202,18 +216,33 @@ export const DamageReturnForm: React.FC = () => {
         item_code: '',
         pack: 1,
         carton: 0,
-        loosePcs: 0, // holds total pieces
+        manual_code: '',
+        issue_units: 0,
+        pcs: 0,
         rate: '0.00',
         amount: '0.00',
         s_tax_rate: '0.00',
         s_tax_amount: '0.00',
+        gross_amount: '0.00',
         net_amount: '0.00'
       }
     ]);
   };
 
-  // Handle changing an item inside a row dropdown
+  // Remove line item
+  const removeLineItem = (index: number) => {
+    if (isViewMode) return;
+    if (lineItems.length <= 1) {
+      setError('Return must have at least one row.');
+      setTimeout(() => setError(''), 3000);
+      return;
+    }
+    setLineItems(lineItems.filter((_, idx) => idx !== index));
+  };
+
+  // Handle row item change
   const handleRowItemChange = (index: number, itemId: string) => {
+    if (isViewMode) return;
     if (!itemId) {
       const updated = [...lineItems];
       updated[index] = {
@@ -222,11 +251,14 @@ export const DamageReturnForm: React.FC = () => {
         item_code: '',
         pack: 1,
         carton: 0,
-        loosePcs: 0,
+        manual_code: '',
+        issue_units: 0,
+        pcs: 0,
         rate: '0.00',
         amount: '0.00',
         s_tax_rate: '0.00',
         s_tax_amount: '0.00',
+        gross_amount: '0.00',
         net_amount: '0.00'
       };
       setLineItems(updated);
@@ -236,7 +268,6 @@ export const DamageReturnForm: React.FC = () => {
     const selected = items.find(it => it.id === itemId);
     if (!selected) return;
 
-    // Check duplicate
     if (lineItems.some((li, idx) => li.item === itemId && idx !== index)) {
       setError('Item is already added to another row.');
       setTimeout(() => setError(''), 3000);
@@ -245,8 +276,8 @@ export const DamageReturnForm: React.FC = () => {
 
     const updated = [...lineItems];
     const pack = selected.pack || 1;
-    const rate = parseFloat(selected.purchase_rate || '0.00').toFixed(2);
-    const sTaxRate = parseFloat(selected.purchase_tax || '0.00').toFixed(2);
+    const rate = parseFloat(selected.sales_rate || '0.00').toFixed(2);
+    const sTaxRate = parseFloat(selected.sales_tax || '0.00').toFixed(2);
 
     updated[index] = {
       item: selected.id,
@@ -254,96 +285,110 @@ export const DamageReturnForm: React.FC = () => {
       item_code: selected.code,
       pack: pack,
       carton: updated[index].carton || 0,
-      loosePcs: updated[index].loosePcs || 0,
+      manual_code: updated[index].manual_code || '',
+      issue_units: updated[index].issue_units || 0,
+      pcs: updated[index].pcs || 0,
       rate: rate,
       amount: '0.00',
       s_tax_rate: sTaxRate,
       s_tax_amount: '0.00',
+      gross_amount: '0.00',
       net_amount: '0.00'
     };
 
     // Calculate row values
     const carton = updated[index].carton;
-    let totalPcs = updated[index].loosePcs || 0;
+    let totalPcs = updated[index].pcs || 0;
     if (carton > 0 && totalPcs === 0) {
       totalPcs = carton * pack;
-      updated[index].loosePcs = totalPcs;
+      updated[index].pcs = totalPcs;
     }
     const parsedRate = parseFloat(rate);
     const parsedSTaxRate = parseFloat(sTaxRate);
 
     const baseAmount = totalPcs * parsedRate;
     const sTaxAmt = baseAmount * (parsedSTaxRate / 100);
-    const netAmt = baseAmount + sTaxAmt;
+    const grossAmt = baseAmount + sTaxAmt;
+    const netAmt = grossAmt;
 
     updated[index].amount = baseAmount.toFixed(2);
     updated[index].s_tax_amount = sTaxAmt.toFixed(2);
+    updated[index].gross_amount = grossAmt.toFixed(2);
     updated[index].net_amount = netAmt.toFixed(2);
 
     setLineItems(updated);
   };
 
-  // Update line item details
+  // Update line item
   const updateLineItem = (index: number, key: string, value: any) => {
+    if (isViewMode) return;
     const updated = [...lineItems];
     const item = { ...updated[index] };
 
-    if (key === 'carton') {
+    if (key === 'manual_code') {
+      item.manual_code = value;
+    } else if (key === 'issue_units') {
+      item.issue_units = parseFloat(value) || 0;
+    } else if (key === 'carton') {
       item.carton = parseFloat(value) || 0;
-      item.loosePcs = item.carton * item.pack;
-    } else if (key === 'loosePcs') {
-      item.loosePcs = parseFloat(value) || 0;
-      item.carton = Math.floor(item.loosePcs / item.pack);
+      item.pcs = item.carton * item.pack;
+    } else if (key === 'pcs') {
+      item.pcs = parseFloat(value) || 0;
+      item.carton = Math.floor(item.pcs / item.pack);
     } else if (key === 'rate') {
       item.rate = value;
     } else if (key === 's_tax_rate') {
       item.s_tax_rate = value;
     }
 
-    // Calculations
-    const totalPcs = item.loosePcs; // holds total pieces
+    const totalPcs = item.pcs;
     const parsedRate = parseFloat(item.rate) || 0;
     const parsedSTaxRate = parseFloat(item.s_tax_rate) || 0;
 
     const baseAmount = totalPcs * parsedRate;
     const sTaxAmt = baseAmount * (parsedSTaxRate / 100);
-    const netAmt = baseAmount + sTaxAmt;
+    const grossAmt = baseAmount + sTaxAmt;
+    const netAmt = grossAmt;
 
     item.amount = baseAmount.toFixed(2);
     item.s_tax_amount = sTaxAmt.toFixed(2);
+    item.gross_amount = grossAmt.toFixed(2);
     item.net_amount = netAmt.toFixed(2);
 
     updated[index] = item;
     setLineItems(updated);
   };
 
-  // Remove line item row
-  const removeLineItem = (index: number) => {
-    if (lineItems.length <= 1) {
-      setError('Invoice must have at least one row.');
-      setTimeout(() => setError(''), 3000);
-      return;
-    }
-    setLineItems(lineItems.filter((_, idx) => idx !== index));
-  };
-
-  // Totals calculations
+  // Totals
   const grandTotal = lineItems.reduce((sum, li) => sum + (parseFloat(li.net_amount) || 0), 0);
   const totalSTaxSum = lineItems.reduce((sum, li) => sum + (parseFloat(li.s_tax_amount) || 0), 0);
 
-  // Sync document level tax
   useEffect(() => {
     setSTax(totalSTaxSum.toFixed(2));
   }, [lineItems]);
 
-  // Submit Handler
+  // ✅ FIXED: Status change ONLY updates local state - NO API CALL!
+  const handleStatusChange = (newStatus: 'pending' | 'paid') => {
+    if (isViewMode) return;
+    setStatusVal(newStatus);
+    setIsStatusDropdownOpen(false);
+  };
+
+  // ✅ FIXED: Return type change ONLY updates local state - NO API CALL!
+  const handleReturnTypeChange = (newType: 'normal' | 'damage') => {
+    if (isViewMode) return;
+    setReturnType(newType);
+    setIsReturnTypeDropdownOpen(false);
+  };
+
+  // ✅ Submit Handler - ALL CHANGES SAVED TOGETHER
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isViewMode) return;
     
-    // Filter blank lines
     const validLines = lineItems.filter(li => li.item);
     if (validLines.length === 0) {
-      setError('Damage return must have at least one valid item selected.');
+      setError('Sales return must have at least one valid item selected.');
       setTimeout(() => setError(''), 4000);
       return;
     }
@@ -362,13 +407,15 @@ export const DamageReturnForm: React.FC = () => {
       return;
     }
 
-    const payload = {
+    // ✅ Build payload with ALL changes
+    const payload: any = {
       date: finalDate,
-      party_inv_no: partyInvNo.trim() || null,
-      supplier,
+      salesman: salesman || null,
+      party,
       account,
       company: activeCompany?.id,
       status: statusVal,
+      return_type: returnType,
       remarks: remarks.trim() || null,
       s_tax: sTax || '0.00',
       net_amount: grandTotal.toFixed(2),
@@ -379,27 +426,36 @@ export const DamageReturnForm: React.FC = () => {
       credit_days: creditDays || 0,
       line_items: validLines.map(li => ({
         item: li.item,
-        carton: li.carton,
-        pcs: li.loosePcs, // total pieces
+        manual_code: li.manual_code || null,
+        issue_units: li.issue_units,
+        pcs: li.pcs,
         rate: li.rate,
         amount: li.amount,
         s_tax_rate: li.s_tax_rate,
         s_tax_amount: li.s_tax_amount,
+        gross_amount: li.gross_amount,
         net_amount: li.net_amount
       }))
     };
 
     try {
-      if (id) {
-        await api.put(`/damage-returns/${id}/`, payload);
-        setSuccess('Damage return updated successfully.');
+      if (isEditMode) {
+        await api.put(`/sales-returns/${id}/`, payload);
+        setSuccess('Sales return updated successfully.');
       } else {
-        await api.post('/damage-returns/', payload);
-        setSuccess('Damage return saved successfully.');
+        await api.post('/sales-returns/', payload);
+        setSuccess('Sales return saved successfully.');
       }
+      
+      // Refresh the list
+      if (fetchSalesReturns) {
+        fetchSalesReturns();
+      }
+      
       setTimeout(() => setSuccess(''), 3000);
-      navigate(`/branch/${branchSlug}/company/${companySlug}/damage-return`);
+      navigate(`/branch/${branchSlug}/company/${companySlug}/sales-return`);
     } catch (err: any) {
+      console.error('Save error:', err);
       const errorData = err.response?.data;
       if (errorData) {
         const errors: Record<string, string> = {};
@@ -421,50 +477,79 @@ export const DamageReturnForm: React.FC = () => {
     }
   };
 
+  // Check if field should be disabled
+  const isDisabled = isViewMode || isSubmitting;
+
   return (
     <div className="animate-fade-in bg-white p-6 w-full mx-auto">
       {/* Top Header Row */}
       <div className="mb-6 pb-4 border-b border-zinc-100 flex items-center justify-between">
         <div>
           <h3 className="text-lg font-bold text-navy tracking-tight">
-            {id ? 'Modify Damage Return' : 'New Damage Return'}
+            {isViewMode ? 'View Sales Return' : isEditMode ? 'Modify Sales Return' : 'New Sales Return'}
           </h3>
           <p className="text-xs text-muted mt-1 font-medium">
-            Record defected or broken products returned to suppliers, and post ledger adjustments.
+            {isViewMode ? 'View product return details.' : 'Record product returns from customers and post ledger adjustments.'}
           </p>
         </div>
 
         <div className="flex items-center gap-3">
-          {/* Status Toggle Dropdown Button */}
+          {/* ✅ Return Type Dropdown - LOCAL STATE ONLY */}
           <div className="relative">
             <button
               type="button"
-              onClick={() => setIsStatusDropdownOpen(!isStatusDropdownOpen)}
+              onClick={() => !isViewMode && !isSubmitting && setIsReturnTypeDropdownOpen(!isReturnTypeDropdownOpen)}
+              className={`cursor-pointer px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all shadow-xs border flex items-center gap-1.5 ${
+                returnType === 'damage'
+                  ? 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'
+                  : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'
+              } ${isViewMode ? 'opacity-60 cursor-default' : ''}`}
+              disabled={isViewMode || isSubmitting}
+            >
+              Type: {returnType} {!isViewMode && <span className="text-[8px]">▼</span>}
+            </button>
+            {isReturnTypeDropdownOpen && !isViewMode && (
+              <div className="absolute right-0 top-[100%] mt-1 bg-white border border-zinc-200 rounded-xl shadow-lg z-50 text-xs font-bold divide-y divide-zinc-50 w-28 overflow-hidden">
+                <div
+                  onClick={() => handleReturnTypeChange('normal')}
+                  className="px-4 py-2 hover:bg-blue-50 text-blue-600 cursor-pointer transition-colors"
+                >
+                  NORMAL
+                </div>
+                <div
+                  onClick={() => handleReturnTypeChange('damage')}
+                  className="px-4 py-2 hover:bg-amber-50 text-amber-600 cursor-pointer transition-colors"
+                >
+                  DAMAGE
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* ✅ Status Dropdown - LOCAL STATE ONLY */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => !isViewMode && !isSubmitting && setIsStatusDropdownOpen(!isStatusDropdownOpen)}
               className={`cursor-pointer px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all shadow-xs border flex items-center gap-1.5 ${
                 statusVal === 'paid'
                   ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
                   : 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100'
-              }`}
-              disabled={isSubmitting}
+              } ${isViewMode ? 'opacity-60 cursor-default' : ''}`}
+              disabled={isViewMode || isSubmitting}
             >
-              Status: {statusVal} <span className="text-[8px]">▼</span>
+              Status: {statusVal} {!isViewMode && <span className="text-[8px]">▼</span>}
             </button>
-            {isStatusDropdownOpen && (
+            {isStatusDropdownOpen && !isViewMode && (
               <div className="absolute right-0 top-[100%] mt-1 bg-white border border-zinc-200 rounded-xl shadow-lg z-50 text-xs font-bold divide-y divide-zinc-50 w-28 overflow-hidden">
                 <div
-                  onClick={() => {
-                    setStatusVal('pending');
-                    setIsStatusDropdownOpen(false);
-                  }}
+                  onClick={() => handleStatusChange('pending')}
                   className="px-4 py-2 hover:bg-rose-50 text-rose-600 cursor-pointer transition-colors"
                 >
                   PENDING
                 </div>
                 <div
-                  onClick={() => {
-                    setStatusVal('paid');
-                    setIsStatusDropdownOpen(false);
-                  }}
+                  onClick={() => handleStatusChange('paid')}
                   className="px-4 py-2 hover:bg-emerald-50 text-emerald-600 cursor-pointer transition-colors"
                 >
                   PAID
@@ -475,16 +560,27 @@ export const DamageReturnForm: React.FC = () => {
 
           <button
             type="button"
-            onClick={() => navigate(`/branch/${branchSlug}/company/${companySlug}/damage-return`)}
+            onClick={() => navigate(`/branch/${branchSlug}/company/${companySlug}/sales-return`)}
             className="cursor-pointer bg-zinc-50 border border-zinc-200 hover:bg-zinc-100 text-zinc-600 text-xs font-bold px-4 py-2 rounded-xl transition-all"
             disabled={isSubmitting}
           >
-            Cancel
+            {isViewMode ? 'Back' : 'Cancel'}
           </button>
+
+          {!isViewMode && (
+            <button
+              type="submit"
+              form="sales-return-form"
+              className="cursor-pointer bg-primary hover:bg-primary-hover text-white text-xs font-bold px-6 py-2.5 rounded-xl transition-all shadow-xs"
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? 'Saving...' : isEditMode ? 'Update Changes' : 'Save'}
+            </button>
+          )}
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form id="sales-return-form" onSubmit={handleSubmit} className="space-y-6">
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
           {/* Date */}
           <div className="flex flex-col gap-1.5">
@@ -494,37 +590,38 @@ export const DamageReturnForm: React.FC = () => {
               required
               className="text-xs border border-zinc-200 rounded-xl px-3 py-2.5 bg-white font-bold outline-hidden focus:outline-hidden"
               value={dateInput}
-              onChange={(e) => setDateInput(e.target.value)}
+              onChange={(e) => !isViewMode && setDateInput(e.target.value)}
               onBlur={handleDateBlur}
-              disabled={isSubmitting}
+              disabled={isDisabled}
             />
             {formErrors.date && <span className="text-[10px] text-danger font-semibold mt-1">{formErrors.date}</span>}
           </div>
 
-          {/* Party Inv. # */}
-          <div className="flex flex-col gap-1.5">
-            <label className="text-[10px] font-bold text-zinc-500 uppercase">Party Inv. #</label>
-            <input
-              type="text"
-              className="text-xs border border-zinc-200 rounded-xl px-3 py-2.5 bg-white font-bold outline-hidden focus:outline-hidden"
-              value={partyInvNo}
-              onChange={(e) => setPartyInvNo(e.target.value)}
-              disabled={isSubmitting}
-            />
-            {formErrors.party_inv_no && <span className="text-[10px] text-danger font-semibold mt-1">{formErrors.party_inv_no}</span>}
-          </div>
-
-          {/* Supplier Select */}
+          {/* Customer Select */}
           <div className="flex flex-col gap-1.5 md:col-span-2">
             <SearchableSelect
-              label="Supplier Name *"
-              placeholder=""
-              options={suppliers.map(s => ({ value: s.id, label: `${s.name} (${s.contact_no})` }))}
-              value={supplier}
-              onChange={(val) => handleSupplierChange(val)}
-              disabled={isSubmitting || !!id}
+              label="Customer Name *"
+              placeholder="-- Select Customer --"
+              options={customers.map(c => ({ value: c.id, label: `${c.name} (${c.contact_no})` }))}
+              value={party}
+              onChange={(val) => handlePartyChange(val)}
+              disabled={isDisabled || !!id}
               required
-              error={formErrors.supplier}
+              error={formErrors.party}
+            />
+          </div>
+
+          {/* Salesman Select */}
+          <div className="flex flex-col gap-1.5">
+            <SearchableSelect
+              label="Salesman *"
+              placeholder="-- Select Salesman --"
+              options={activeSalesmen.map(s => ({ value: s.id, label: `${s.name} (${s.contact_no})` }))}
+              value={salesman}
+              onChange={(val) => setSalesman(val)}
+              disabled={isDisabled}
+              required
+              error={formErrors.salesman}
             />
           </div>
 
@@ -532,11 +629,11 @@ export const DamageReturnForm: React.FC = () => {
           <div className="flex flex-col gap-1.5 md:col-span-2">
             <SearchableSelect
               label="Financial Account *"
-              placeholder=""
+              placeholder="-- Select Account --"
               options={activeAccounts.map(a => ({ value: a.id, label: `${a.name} (${a.code})` }))}
               value={account}
               onChange={(val) => setAccount(val)}
-              disabled={isSubmitting}
+              disabled={isDisabled}
               required
               error={formErrors.account}
             />
@@ -549,12 +646,12 @@ export const DamageReturnForm: React.FC = () => {
               type="text"
               className="text-xs border border-zinc-200 rounded-xl px-3 py-2.5 bg-white font-bold outline-hidden focus:outline-hidden"
               value={remarks}
-              onChange={(e) => setRemarks(e.target.value)}
-              disabled={isSubmitting}
+              onChange={(e) => !isViewMode && setRemarks(e.target.value)}
+              disabled={isDisabled}
             />
           </div>
 
-          {/* NTN */}
+          {/* NTN, GST, etc. */}
           <div className="flex flex-col gap-1.5">
             <label className="text-[10px] font-bold text-zinc-500 uppercase">NTN</label>
             <div className="text-xs border border-zinc-100 rounded-xl px-3 py-2.5 bg-zinc-50 font-bold text-zinc-600 min-h-[38px] flex items-center">
@@ -562,7 +659,6 @@ export const DamageReturnForm: React.FC = () => {
             </div>
           </div>
 
-          {/* GST */}
           <div className="flex flex-col gap-1.5">
             <label className="text-[10px] font-bold text-zinc-500 uppercase">GST Registration</label>
             <div className="text-xs border border-zinc-100 rounded-xl px-3 py-2.5 bg-zinc-50 font-bold text-zinc-600 min-h-[38px] flex items-center">
@@ -570,92 +666,118 @@ export const DamageReturnForm: React.FC = () => {
             </div>
           </div>
 
-          {/* Credit Limit */}
           <div className="flex flex-col gap-1.5">
             <label className="text-[10px] font-bold text-zinc-500 uppercase">Credit Limit (Rs.)</label>
             <div className="text-xs border border-zinc-100 rounded-xl px-3 py-2.5 bg-zinc-50 font-bold text-zinc-600 min-h-[38px] flex items-center">
-              {supplier ? `Rs. ${parseFloat(creditLimit).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
+              {party ? `Rs. ${parseFloat(creditLimit).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
             </div>
           </div>
 
-          {/* Outstanding Balance */}
           <div className="flex flex-col gap-1.5">
             <label className="text-[10px] font-bold text-zinc-500 uppercase">Outstanding Bal. (Rs.)</label>
             <div className="text-xs border border-zinc-100 rounded-xl px-3 py-2.5 bg-zinc-50 font-bold text-zinc-600 min-h-[38px] flex items-center">
-              {supplier ? `Rs. ${parseFloat(balanceAmount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
+              {party ? `Rs. ${parseFloat(balanceAmount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
             </div>
           </div>
 
-          {/* Credit Days Allowed */}
           <div className="flex flex-col gap-1.5">
             <label className="text-[10px] font-bold text-zinc-500 uppercase">Credit Days Allowed</label>
             <div className="text-xs border border-zinc-100 rounded-xl px-3 py-2.5 bg-zinc-50 font-bold text-zinc-600 min-h-[38px] flex items-center">
-              {supplier ? `${creditDays} day${creditDays !== 1 ? 's' : ''}` : '—'}
+              {party ? `${creditDays} day${creditDays !== 1 ? 's' : ''}` : '—'}
             </div>
           </div>
         </div>
 
-        {/* Line Items Catalogue Table */}
+        {/* Line Items Table */}
         <div className="pt-4">
           <table className="min-w-full border-collapse border border-zinc-200 text-left">
             <thead>
               <tr className="bg-zinc-50 text-[10px] font-bold tracking-wider text-muted uppercase">
+                <th className="border border-zinc-200 px-3 py-2 w-24">Manual Code</th>
                 <th className="border border-zinc-200 px-3 py-2 min-w-[220px]">Item Name</th>
                 <th className="border border-zinc-200 px-3 py-2 text-right w-16">Pack</th>
                 <th className="border border-zinc-200 px-3 py-2 text-right w-20">Carton</th>
-                <th className="border border-zinc-200 px-3 py-2 text-right w-20">Pieces (Pcs)</th>
+                <th className="border border-zinc-200 px-3 py-2 text-right w-20">Return Qty (Pcs)</th>
+                <th className="border border-zinc-200 px-3 py-2 text-right w-20">Issue Units</th>
                 <th className="border border-zinc-200 px-3 py-2 text-right w-24">Rate (Pc)</th>
                 <th className="border border-zinc-200 px-3 py-2 text-right w-20">S.Tax Rate (%)</th>
                 <th className="border border-zinc-200 px-3 py-2 text-right">S.Tax Amount</th>
+                <th className="border border-zinc-200 px-3 py-2 text-right">Gross Amount</th>
                 <th className="border border-zinc-200 px-3 py-2 text-right">Net Amount</th>
-                <th className="border border-zinc-200 px-3 py-2 text-center w-20">Actions</th>
+                <th className="border border-zinc-200 px-3 py-2 text-center w-24">Actions</th>
               </tr>
             </thead>
             <tbody className="text-xs font-medium text-zinc-700 bg-white">
               {lineItems.map((li, index) => {
+                const isRowDisabled = isDisabled || !li.item;
                 return (
                   <tr key={index} className="hover:bg-zinc-50/20 transition-colors">
+                    <td className="border border-zinc-200 p-0">
+                      <input
+                        type="text"
+                        placeholder="Code"
+                        className="w-full h-full bg-transparent border-0 focus:outline-hidden focus:ring-0 px-3 py-2 text-xs font-bold"
+                        value={li.manual_code}
+                        onChange={(e) => updateLineItem(index, 'manual_code', e.target.value)}
+                        disabled={isDisabled}
+                      />
+                    </td>
+                    
                     <td className="border border-zinc-200 p-0">
                       <SearchableSelect
                         compact
                         borderless
-                        placeholder=""
+                        placeholder={isViewMode ? li.item_name || '--' : "-- Select Item --"}
                         options={items.filter(it => it.is_active).map(it => ({ value: it.id, label: `${it.name} (${it.code})` }))}
                         value={li.item}
                         onChange={(val) => handleRowItemChange(index, val)}
-                        disabled={isSubmitting}
+                        disabled={isDisabled}
                       />
                     </td>
 
-                    <td className="border border-zinc-200 px-3 py-2 text-right text-zinc-500 font-semibold">{li.pack}</td>
-                    
-                    {/* Carton */}
+                    <td className="border border-zinc-200 px-3 py-2 text-right text-zinc-500 font-semibold">
+                      {li.pack}
+                    </td>
+
                     <td className="border border-zinc-200 p-0 text-right">
                       <input
                         type="number"
                         min="0"
+                        step="1"
                         className="w-full h-full text-right bg-transparent border-0 focus:outline-hidden focus:ring-0 px-3 py-2 text-xs font-semibold"
                         value={li.carton}
                         onChange={(e) => updateLineItem(index, 'carton', e.target.value)}
                         onFocus={(e) => e.target.select()}
-                        disabled={isSubmitting || !li.item}
+                        disabled={isRowDisabled}
                       />
                     </td>
 
-                    {/* Pieces */}
                     <td className="border border-zinc-200 p-0 text-right">
                       <input
                         type="number"
                         min="0"
-                        className="w-full h-full text-right bg-transparent border-0 focus:outline-hidden focus:ring-0 px-3 py-2 text-xs font-semibold"
-                        value={li.loosePcs}
-                        onChange={(e) => updateLineItem(index, 'loosePcs', e.target.value)}
+                        step="1"
+                        className="w-full h-full text-right bg-transparent border-0 focus:outline-hidden focus:ring-0 px-3 py-2 text-xs font-bold text-navy"
+                        value={li.pcs}
+                        onChange={(e) => updateLineItem(index, 'pcs', e.target.value)}
                         onFocus={(e) => e.target.select()}
-                        disabled={isSubmitting || !li.item}
+                        disabled={isRowDisabled}
                       />
                     </td>
 
-                    {/* Rate */}
+                    <td className="border border-zinc-200 p-0 text-right">
+                      <input
+                        type="number"
+                        min="0"
+                        step="1"
+                        className="w-full h-full text-right bg-transparent border-0 focus:outline-hidden focus:ring-0 px-3 py-2 text-xs font-semibold"
+                        value={li.issue_units}
+                        onChange={(e) => updateLineItem(index, 'issue_units', e.target.value)}
+                        onFocus={(e) => e.target.select()}
+                        disabled={isRowDisabled}
+                      />
+                    </td>
+
                     <td className="border border-zinc-200 p-0 text-right">
                       <input
                         type="number"
@@ -665,11 +787,10 @@ export const DamageReturnForm: React.FC = () => {
                         value={li.rate}
                         onChange={(e) => updateLineItem(index, 'rate', e.target.value)}
                         onFocus={(e) => e.target.select()}
-                        disabled={isSubmitting || !li.item}
+                        disabled={isRowDisabled}
                       />
                     </td>
 
-                    {/* Sales Tax Rate */}
                     <td className="border border-zinc-200 p-0 text-right">
                       <input
                         type="number"
@@ -679,42 +800,48 @@ export const DamageReturnForm: React.FC = () => {
                         value={li.s_tax_rate}
                         onChange={(e) => updateLineItem(index, 's_tax_rate', e.target.value)}
                         onFocus={(e) => e.target.select()}
-                        disabled={isSubmitting || !li.item}
+                        disabled={isRowDisabled}
                       />
                     </td>
 
-                    {/* Sales Tax Amount */}
                     <td className="border border-zinc-200 px-3 py-2 text-right text-zinc-600">
                       {li.item ? `Rs. ${parseFloat(li.s_tax_amount).toFixed(2)}` : '—'}
                     </td>
 
-                    {/* Net */}
+                    <td className="border border-zinc-200 px-3 py-2 text-right text-zinc-600">
+                      {li.item ? `Rs. ${parseFloat(li.gross_amount).toFixed(2)}` : '—'}
+                    </td>
+
                     <td className="border border-zinc-200 px-3 py-2 text-right text-navy font-bold">
                       {li.item ? `Rs. ${parseFloat(li.net_amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
                     </td>
 
-                    {/* Action delete & add */}
                     <td className="border border-zinc-200 px-3 py-2 text-center">
-                      <div className="flex items-center justify-center gap-1.5">
-                        <button
-                          type="button"
-                          onClick={addEmptyLineItem}
-                          className="cursor-pointer text-emerald-600 hover:text-emerald-800 text-sm font-bold w-6 h-6 rounded hover:bg-emerald-50 transition-colors flex items-center justify-center border border-emerald-100"
-                          title="Add new line"
-                          disabled={isSubmitting}
-                        >
-                          ＋
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => removeLineItem(index)}
-                          className="cursor-pointer text-danger hover:text-red-700 text-sm font-bold w-6 h-6 rounded hover:bg-red-50 transition-colors flex items-center justify-center border border-red-100"
-                          title="Delete line"
-                          disabled={isSubmitting}
-                        >
-                          ✕
-                        </button>
-                      </div>
+                      {!isViewMode && (
+                        <div className="flex items-center justify-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={addEmptyLineItem}
+                            className="cursor-pointer text-emerald-600 hover:text-emerald-800 text-sm font-bold w-7 h-7 rounded hover:bg-emerald-50 transition-colors flex items-center justify-center border border-emerald-100"
+                            title="Add new line"
+                            disabled={isDisabled}
+                          >
+                            ＋
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => removeLineItem(index)}
+                            className="cursor-pointer text-danger hover:text-red-700 text-sm font-bold w-7 h-7 rounded hover:bg-red-50 transition-colors flex items-center justify-center border border-red-100"
+                            title="Delete line"
+                            disabled={isDisabled}
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      )}
+                      {isViewMode && (
+                        <span className="text-xs text-slate-400">View only</span>
+                      )}
                     </td>
                   </tr>
                 );
@@ -722,16 +849,18 @@ export const DamageReturnForm: React.FC = () => {
             </tbody>
           </table>
 
-          <div className="pt-3 flex justify-start">
-            <button
-              type="button"
-              onClick={addEmptyLineItem}
-              className="cursor-pointer text-xs font-semibold px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-700 transition-all font-bold"
-              disabled={isSubmitting}
-            >
-              + Add a line
-            </button>
-          </div>
+          {!isViewMode && (
+            <div className="pt-3 flex justify-start">
+              <button
+                type="button"
+                onClick={addEmptyLineItem}
+                className="cursor-pointer text-xs font-semibold px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-700 transition-all font-bold"
+                disabled={isDisabled}
+              >
+                + Add a line
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Totals Summary */}
@@ -740,36 +869,40 @@ export const DamageReturnForm: React.FC = () => {
             <h4 className="text-xs font-bold uppercase tracking-wider text-navy mb-2">Grand Summary</h4>
             
             <div className="flex justify-between items-center text-zinc-600">
-              <span>Sales Tax Offsets</span>
+              <span>Total Sales Tax Offsets</span>
               <span>Rs. {parseFloat(sTax).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
             </div>
 
             <div className="flex justify-between items-center text-primary text-sm font-bold pt-1.5 border-t border-dashed border-zinc-200">
-              <span>Sub Total Refund</span>
+              <span>Total Net Amount</span>
               <span>Rs. {grandTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
             </div>
           </div>
         </div>
 
-        {/* Submit Actions */}
-        <div className="pt-4 border-t border-zinc-100 flex items-center justify-end gap-3">
-          <button
-            type="button"
-            onClick={() => navigate(`/branch/${branchSlug}/company/${companySlug}/damage-return`)}
-            className="cursor-pointer bg-zinc-100 hover:bg-zinc-200 text-zinc-700 text-xs font-bold px-5 py-2.5 rounded-xl transition-all"
-            disabled={isSubmitting}
-          >
-            Cancel
-          </button>
-          <button
-            type="submit"
-            className="cursor-pointer bg-primary hover:bg-primary-hover text-white text-xs font-bold px-6 py-2.5 rounded-xl transition-all shadow-xs"
-            disabled={isSubmitting}
-          >
-            {isSubmitting ? 'Saving Return...' : 'Save Damage Return'}
-          </button>
-        </div>
+        {/* Submit Actions - Only show in Edit/New mode */}
+        {!isViewMode && (
+          <div className="pt-4 border-t border-zinc-100 flex items-center justify-end gap-3">
+            <button
+              type="button"
+              onClick={() => navigate(`/branch/${branchSlug}/company/${companySlug}/sales-return`)}
+              className="cursor-pointer bg-zinc-100 hover:bg-zinc-200 text-zinc-700 text-xs font-bold px-5 py-2.5 rounded-xl transition-all"
+              disabled={isSubmitting}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="cursor-pointer bg-primary hover:bg-primary-hover text-white text-xs font-bold px-6 py-2.5 rounded-xl transition-all shadow-xs"
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? 'Saving...' : isEditMode ? 'Update Changes' : 'Save Return'}
+            </button>
+          </div>
+        )}
       </form>
     </div>
   );
 };
+
+export default SalesReturnForm;

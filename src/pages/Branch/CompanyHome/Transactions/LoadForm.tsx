@@ -25,3 +25,6 @@ export const LoadForm: React.FC = () => {
     </div>
   );
 };
+
+export default LoadForm;
+
